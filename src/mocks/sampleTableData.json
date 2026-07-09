@@ -1,0 +1,5 @@
+[
+  { "id": "1", "label": "Sample A", "category": "alpha", "quantity": 10, "active": true, "effectiveDate": "2026-01-15" },
+  { "id": "2", "label": "Sample B", "category": "beta", "quantity": 25, "active": false, "effectiveDate": "2026-02-20" },
+  { "id": "3", "label": "Sample C", "category": "gamma", "quantity": 7, "active": true, "effectiveDate": "2026-03-01" }
+]

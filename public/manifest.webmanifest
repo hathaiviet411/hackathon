@@ -1,0 +1,17 @@
+{
+  "name": "VAIC 2026 PWA Template",
+  "short_name": "VAIC PWA",
+  "description": "Foundational PWA template for VAIC 2026 hackathon",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

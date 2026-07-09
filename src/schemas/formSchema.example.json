@@ -1,0 +1,48 @@
+{
+  "id": "generic-form",
+  "title": "Generic Data Entry",
+  "description": "Schema-driven form — no domain-specific fields",
+  "fields": [
+    {
+      "name": "label",
+      "label": "Label",
+      "type": "text",
+      "required": true,
+      "placeholder": "Enter a label",
+      "validation": { "minLength": 2, "maxLength": 100 }
+    },
+    {
+      "name": "category",
+      "label": "Category",
+      "type": "select",
+      "required": true,
+      "options": [
+        { "value": "alpha", "label": "Alpha" },
+        { "value": "beta", "label": "Beta" },
+        { "value": "gamma", "label": "Gamma" }
+      ]
+    },
+    {
+      "name": "quantity",
+      "label": "Quantity",
+      "type": "number",
+      "validation": { "min": 0, "max": 9999 }
+    },
+    {
+      "name": "notes",
+      "label": "Notes",
+      "type": "textarea",
+      "placeholder": "Optional notes"
+    },
+    {
+      "name": "active",
+      "label": "Active",
+      "type": "checkbox"
+    },
+    {
+      "name": "effectiveDate",
+      "label": "Effective Date",
+      "type": "date"
+    }
+  ]
+}
