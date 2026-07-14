@@ -5,9 +5,12 @@ import DynamicForm from '@/components/forms/DynamicForm.vue'
 import DataTable from '@/components/data/DataTable.vue'
 import AgentTraceStream from '@/components/agent/AgentTraceStream.vue'
 import ChatAssistant from '@/components/chat/ChatAssistant.vue'
+import MarkdownContent from '@/components/chat/MarkdownContent.vue'
 import CameraCapture from '@/components/media/CameraCapture.vue'
 import FileUploader from '@/components/media/FileUploader.vue'
 import { AiGateway } from '@/services/AiGateway'
+import { DEFAULT_SYSTEM_PROMPT, getModelOption, LOCAL_MODELS } from '@/config/ai'
+import { toSafePromptText, usePlainTextPaste } from '@/utils/plainTextPaste'
 import { useAppStore } from '@/stores/app'
 import { useAiEngineStore } from '@/stores/aiEngine'
 import type { ChatMessage, ExtractedFileResult, FormSchema, TableColumn } from '@/types'
@@ -56,22 +59,26 @@ function onFormSubmit(data: Record<string, unknown>) {
 
 // Module 2: Chat
 const chatMessages = ref<ChatMessage[]>([])
-const streamingContent = ref('')
 const isChatStreaming = ref(false)
-
-function onChatSend(message: string) {
-  chatMessages.value.push({
-    id: crypto.randomUUID(),
-    role: 'user',
-    content: message,
-  })
-  runAiInference(message)
-}
 
 // Module 3: AI Engine
 const aiPrompt = ref('')
 const isModelLoaded = ref(false)
 const isInferring = ref(false)
+const aiExchanges = ref<{
+  id: string
+  prompt: string
+  response: string
+  status: 'streaming' | 'done' | 'error'
+}[]>([])
+const systemPrompt = ref(DEFAULT_SYSTEM_PROMPT)
+const onAiPromptPaste = usePlainTextPaste(aiPrompt, { singleLine: true })
+const onSystemPromptPaste = usePlainTextPaste(systemPrompt)
+const engineHistoryTurns = ref(0)
+const selectedModelId = ref<string>(AiGateway.getModelId())
+const isSwitchingModel = ref(false)
+
+const selectedModel = computed(() => getModelOption(selectedModelId.value))
 
 const routingOptions = [
   { value: 'auto', label: 'Auto' },
@@ -81,58 +88,146 @@ const routingOptions = [
 
 async function loadModel() {
   try {
-    await AiGateway.init({ mode: aiStore.routingMode })
+    await AiGateway.init({
+      mode: aiStore.routingMode,
+      modelId: selectedModelId.value,
+    })
     isModelLoaded.value = true
   } catch (e) {
     console.error('Model load failed:', e)
+    isModelLoaded.value = false
   }
 }
 
-async function runAiInference(prompt: string) {
+async function onModelChange(value: string) {
+  if (!value || value === selectedModelId.value || isSwitchingModel.value) return
+
+  selectedModelId.value = value
+  const modelChanged = AiGateway.setModelId(value)
+  if (!modelChanged) return
+
+  const shouldReload = isModelLoaded.value
+  if (shouldReload) {
+    isSwitchingModel.value = true
+    isModelLoaded.value = false
+    AiGateway.terminate()
+    try {
+      await loadModel()
+    } finally {
+      isSwitchingModel.value = false
+    }
+  }
+}
+
+async function runChatInference(prompt: string) {
   if (!isModelLoaded.value) {
     await loadModel()
   }
 
-  isInferring.value = true
+  const assistantId = crypto.randomUUID()
   isChatStreaming.value = true
-  streamingContent.value = ''
+  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '' })
 
-  await AiGateway.generate(
-    prompt,
-    {
-      onToken: (token) => {
-        streamingContent.value += token
+  try {
+    await AiGateway.generate(
+      prompt,
+      {
+        onToken: (token) => {
+          const msg = chatMessages.value.find((m) => m.id === assistantId)
+          if (msg && token) msg.content += token
+        },
       },
-      onDone: () => {
-        if (streamingContent.value) {
-          chatMessages.value.push({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: streamingContent.value,
-          })
-        }
-        streamingContent.value = ''
-        isChatStreaming.value = false
-        isInferring.value = false
-      },
-      onError: () => {
-        isChatStreaming.value = false
-        isInferring.value = false
-      },
-    },
-    aiStore.routingMode,
-  )
+      aiStore.routingMode,
+      { session: 'chat' },
+    )
+  } catch (e) {
+    const msg = chatMessages.value.find((m) => m.id === assistantId)
+    if (msg && !msg.content.trim()) {
+      msg.content = e instanceof Error ? e.message : 'Inference failed'
+    }
+  } finally {
+    isChatStreaming.value = false
+    chatMessages.value = chatMessages.value.filter(
+      (m) => m.role !== 'assistant' || m.content.trim().length > 0,
+    )
+  }
+}
+
+function onChatSend(message: string) {
+  const content = toSafePromptText(message)
+  if (!content) return
+  chatMessages.value.push({
+    id: crypto.randomUUID(),
+    role: 'user',
+    content,
+  })
+  runChatInference(content)
 }
 
 async function onAiGenerate() {
-  if (!aiPrompt.value.trim()) return
-  const prompt = aiPrompt.value
+  const prompt = toSafePromptText(aiPrompt.value)
+  if (!prompt || isInferring.value) return
   aiPrompt.value = ''
-  await runAiInference(prompt)
+
+  if (!isModelLoaded.value) {
+    await loadModel()
+  }
+
+  AiGateway.setSystemPrompt(systemPrompt.value)
+
+  const exchangeIndex = aiExchanges.value.length
+  aiExchanges.value.push({ id: crypto.randomUUID(), prompt, response: '', status: 'streaming' })
+
+  isInferring.value = true
+
+  try {
+    await AiGateway.generate(
+      prompt,
+      {
+        onToken: (token) => {
+          if (!token) return
+          const current = aiExchanges.value[exchangeIndex]
+          aiExchanges.value[exchangeIndex] = {
+            ...current,
+            response: current.response + token,
+            status: 'streaming',
+          }
+        },
+      },
+      aiStore.routingMode,
+      { session: 'engine', systemPrompt: systemPrompt.value },
+    )
+
+    const current = aiExchanges.value[exchangeIndex]
+    aiExchanges.value[exchangeIndex] = {
+      ...current,
+      status: current.response.trim() ? 'done' : 'error',
+    }
+    engineHistoryTurns.value = Math.floor(AiGateway.getHistory('engine').length / 2)
+  } catch (e) {
+    const current = aiExchanges.value[exchangeIndex]
+    aiExchanges.value[exchangeIndex] = {
+      ...current,
+      response: current.response || (e instanceof Error ? e.message : 'Inference failed'),
+      status: 'error',
+    }
+  } finally {
+    isInferring.value = false
+  }
 }
 
 function onRoutingChange(value: string) {
   aiStore.setRoutingMode(value as 'auto' | 'local' | 'cloud')
+}
+
+function onSystemPromptChange() {
+  AiGateway.setSystemPrompt(systemPrompt.value)
+}
+
+function clearEngineHistory() {
+  AiGateway.clearHistory('engine')
+  aiExchanges.value = []
+  engineHistoryTurns.value = 0
 }
 
 // Module 4: File extraction table
@@ -167,7 +262,7 @@ const extractedColumns = computed<TableColumn[]>(() => {
 const sectionTitles: Record<string, string> = {
   forms: 'Forms & Data Table',
   agent: 'Agent Trace & Chat',
-  ai: 'AI On-Edge Engine',
+  ai: 'PrimeraLabs Team',
   media: 'File & Media Utilities',
 }
 </script>
@@ -193,7 +288,6 @@ const sectionTitles: Record<string, string> = {
         <AgentTraceStream :auto-connect="false" />
         <ChatAssistant
           :messages="chatMessages"
-          :streaming-content="streamingContent"
           :is-streaming="isChatStreaming"
           @send="onChatSend"
         />
@@ -210,31 +304,85 @@ const sectionTitles: Record<string, string> = {
               Routes inference to WebLLM (Edge) or mock Cloud API based on capability
             </p>
           </div>
-          <SelectRoot :model-value="aiStore.routingMode" @update:model-value="onRoutingChange">
-            <SelectTrigger class="input-base inline-flex w-40 items-center justify-between">
-              <SelectValue placeholder="Routing mode" />
-            </SelectTrigger>
-            <SelectPortal>
-              <SelectContent class="z-50 rounded-lg border border-slate-600 bg-slate-800 p-1 shadow-xl">
-                <SelectViewport>
-                  <SelectItem
-                    v-for="opt in routingOptions"
-                    :key="opt.value"
-                    :value="opt.value"
-                    class="cursor-pointer rounded px-3 py-2 text-sm text-slate-200 outline-none data-[highlighted]:bg-slate-700"
-                  >
-                    <SelectItemText>{{ opt.label }}</SelectItemText>
-                  </SelectItem>
-                </SelectViewport>
-              </SelectContent>
-            </SelectPortal>
-          </SelectRoot>
+          <div class="flex flex-wrap items-center gap-2">
+            <SelectRoot
+              :model-value="selectedModelId"
+              :disabled="isInferring || isSwitchingModel || aiStore.engineState === 'loading'"
+              @update:model-value="onModelChange"
+            >
+              <SelectTrigger class="input-base inline-flex w-44 items-center justify-between">
+                <SelectValue placeholder="Model" />
+              </SelectTrigger>
+              <SelectPortal>
+                <SelectContent class="z-50 rounded-lg border border-slate-600 bg-slate-800 p-1 shadow-xl">
+                  <SelectViewport>
+                    <SelectItem
+                      v-for="model in LOCAL_MODELS"
+                      :key="model.id"
+                      :value="model.id"
+                      class="cursor-pointer rounded px-3 py-2 text-sm text-slate-200 outline-none data-[highlighted]:bg-slate-700"
+                    >
+                      <SelectItemText>{{ model.label }}</SelectItemText>
+                    </SelectItem>
+                  </SelectViewport>
+                </SelectContent>
+              </SelectPortal>
+            </SelectRoot>
+
+            <SelectRoot :model-value="aiStore.routingMode" @update:model-value="onRoutingChange">
+              <SelectTrigger class="input-base inline-flex w-40 items-center justify-between">
+                <SelectValue placeholder="Routing mode" />
+              </SelectTrigger>
+              <SelectPortal>
+                <SelectContent class="z-50 rounded-lg border border-slate-600 bg-slate-800 p-1 shadow-xl">
+                  <SelectViewport>
+                    <SelectItem
+                      v-for="opt in routingOptions"
+                      :key="opt.value"
+                      :value="opt.value"
+                      class="cursor-pointer rounded px-3 py-2 text-sm text-slate-200 outline-none data-[highlighted]:bg-slate-700"
+                    >
+                      <SelectItemText>{{ opt.label }}</SelectItemText>
+                    </SelectItem>
+                  </SelectViewport>
+                </SelectContent>
+              </SelectPortal>
+            </SelectRoot>
+          </div>
+        </div>
+
+        <p v-if="selectedModel" class="text-xs text-slate-500">
+          Edge model: {{ selectedModel.label }} · {{ selectedModel.hint }}
+        </p>
+
+        <Separator class="bg-slate-700" />
+
+        <div class="space-y-2">
+          <label class="text-xs font-medium text-slate-500">System prompt</label>
+          <textarea
+            v-model="systemPrompt"
+            rows="3"
+            class="input-base w-full resize-y"
+            @change="onSystemPromptChange"
+            @paste.capture="onSystemPromptPaste"
+          />
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <span>Conversation history: {{ engineHistoryTurns }} / 6 turns</span>
+            <button
+              type="button"
+              class="text-blue-400 hover:text-blue-300"
+              :disabled="!engineHistoryTurns && !aiExchanges.length"
+              @click="clearEngineHistory"
+            >
+              Clear history
+            </button>
+          </div>
         </div>
 
         <Separator class="bg-slate-700" />
 
         <div class="flex flex-wrap gap-3">
-          <button class="btn-primary" :disabled="aiStore.engineState === 'loading'" @click="loadModel">
+          <button class="btn-primary" :disabled="aiStore.engineState === 'loading' || isSwitchingModel" @click="loadModel">
             <Loader2 v-if="aiStore.engineState === 'loading'" class="h-4 w-4 animate-spin" />
             <Cpu v-else class="h-4 w-4" />
             {{ isModelLoaded ? 'Reload Model' : 'Load Model' }}
@@ -255,7 +403,9 @@ const sectionTitles: Record<string, string> = {
               :style="{ width: `${aiStore.modelProgress}%` }"
             />
           </div>
-          <p class="text-xs text-slate-500">Loading Llama-3.2-1B-Instruct...</p>
+          <p class="text-xs text-slate-500">
+            Loading {{ selectedModel?.label ?? 'model' }}...
+          </p>
         </div>
 
         <form class="flex gap-2" @submit.prevent="onAiGenerate">
@@ -263,8 +413,9 @@ const sectionTitles: Record<string, string> = {
             v-model="aiPrompt"
             type="text"
             class="input-base flex-1"
-            placeholder="Enter a prompt to test inference..."
+            placeholder="Enter a prompt or paste a formula (e.g. $x^2 - 5x + 6 = 0$)..."
             :disabled="isInferring"
+            @paste.capture="onAiPromptPaste"
           />
           <button type="submit" class="btn-primary" :disabled="!aiPrompt.trim() || isInferring">
             <Loader2 v-if="isInferring" class="h-4 w-4 animate-spin" />
@@ -272,8 +423,21 @@ const sectionTitles: Record<string, string> = {
           </button>
         </form>
 
-        <div v-if="streamingContent" class="rounded-lg bg-slate-800 p-4 text-sm text-slate-300">
-          {{ streamingContent }}<span class="animate-pulse">▌</span>
+        <div v-if="aiExchanges.length" class="space-y-4">
+          <div v-for="ex in aiExchanges" :key="ex.id" class="space-y-2">
+            <p class="text-xs font-medium text-slate-500">Prompt</p>
+            <p class="text-sm text-slate-300">{{ ex.prompt }}</p>
+            <p class="text-xs font-medium text-slate-500">
+              Response
+              <span v-if="ex.status === 'error'" class="text-red-400">(error)</span>
+            </p>
+            <div class="rounded-lg bg-slate-800 p-4 text-sm text-slate-300">
+              <MarkdownContent
+                :content="ex.response"
+                :is-streaming="ex.status === 'streaming'"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </section>

@@ -30,7 +30,7 @@ Open [http://localhost:5173](http://localhost:5173).
 - `AgentTraceStream` — SSE-powered vertical timeline (Router, Planner, Tool calls, Escalation)
 - `ChatAssistant` — markdown rendering + streaming text
 
-### 3. AI On-Edge Engine
+### 3. PrimeraLabs Team
 - `ai-worker.ts` — WebLLM in Web Worker (lazy load)
 - `AiGateway` — routes to Edge or mock Cloud API based on `navigator.onLine` + WebGPU
 - `StatusBadge` — shows current engine state

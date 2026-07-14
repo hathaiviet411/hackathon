@@ -1,5 +1,10 @@
-export type WorkerMessageType = 'INIT' | 'GENERATE' | 'TERMINATE'
+export type WorkerMessageType = 'INIT' | 'GENERATE' | 'TERMINATE' | 'RESET_HISTORY'
 export type WorkerResponseType = 'READY' | 'TOKEN' | 'DONE' | 'ERROR' | 'PROGRESS'
+
+export interface LlmMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
 export interface WorkerInitMessage {
   type: 'INIT'
@@ -8,7 +13,10 @@ export interface WorkerInitMessage {
 
 export interface WorkerGenerateMessage {
   type: 'GENERATE'
-  prompt: string
+  /** Preferred: full OpenAI-style message list with string content only. */
+  messages?: LlmMessage[]
+  /** Legacy fallback for older worker payloads. */
+  prompt?: string
   options?: { temperature?: number; maxTokens?: number }
 }
 
@@ -16,7 +24,15 @@ export interface WorkerTerminateMessage {
   type: 'TERMINATE'
 }
 
-export type WorkerInboundMessage = WorkerInitMessage | WorkerGenerateMessage | WorkerTerminateMessage
+export interface WorkerResetHistoryMessage {
+  type: 'RESET_HISTORY'
+}
+
+export type WorkerInboundMessage =
+  | WorkerInitMessage
+  | WorkerGenerateMessage
+  | WorkerTerminateMessage
+  | WorkerResetHistoryMessage
 
 export interface WorkerReadyResponse {
   type: 'READY'
@@ -49,4 +65,4 @@ export type WorkerOutboundMessage =
   | WorkerErrorResponse
   | WorkerProgressResponse
 
-export const DEFAULT_MODEL_ID = 'Llama-3.2-1B-Instruct-q4f16_1-MLC'
+export { DEFAULT_MODEL_ID } from '@/config/ai'

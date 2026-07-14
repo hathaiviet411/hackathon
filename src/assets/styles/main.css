@@ -39,6 +39,28 @@
   }
 }
 
+@layer utilities {
+  .shadow-neon-cyan {
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.4), 0 0 20px rgba(34, 211, 238, 0.2);
+  }
+
+  .shadow-neon-purple {
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.4), 0 0 20px rgba(168, 85, 247, 0.2);
+  }
+
+  .shadow-neon-blue {
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4), 0 0 20px rgba(59, 130, 246, 0.2);
+  }
+
+  .shadow-neon-amber {
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.2);
+  }
+
+  .shadow-neon-orange {
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.4), 0 0 20px rgba(249, 115, 22, 0.2);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

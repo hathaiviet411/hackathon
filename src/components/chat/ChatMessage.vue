@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
+import { renderMarkdownHtml } from '@/utils/renderMarkdown'
+import MarkdownContent from './MarkdownContent.vue'
 
 const props = defineProps<{
   content: string
@@ -9,11 +9,9 @@ const props = defineProps<{
   isStreaming?: boolean
 }>()
 
-const renderedHtml = computed(() => {
-  if (props.role === 'user') return DOMPurify.sanitize(props.content)
-  const html = marked.parse(props.content, { async: false }) as string
-  return DOMPurify.sanitize(html)
-})
+const userHtml = computed(() =>
+  renderMarkdownHtml(props.content, { plainText: true }),
+)
 </script>
 
 <template>
@@ -25,12 +23,8 @@ const renderedHtml = computed(() => {
         : 'bg-slate-800 text-slate-200',
     ]"
   >
-    <div
-      v-if="role === 'assistant'"
-      class="prose prose-invert prose-sm max-w-none [&_code]:rounded [&_code]:bg-slate-700 [&_code]:px-1 [&_pre]:bg-slate-900"
-      v-html="renderedHtml"
-    />
-    <p v-else class="whitespace-pre-wrap">{{ content }}</p>
+    <p v-if="role === 'user'" class="whitespace-pre-wrap" v-html="userHtml" />
+    <MarkdownContent v-else :content="content" :is-streaming="isStreaming" />
     <span v-if="isStreaming" class="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-blue-400" />
   </div>
 </template>
