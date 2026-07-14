@@ -25,38 +25,38 @@ const typeConfig: Record<
   ROUTER: {
     icon: Route,
     label: 'Router',
-    accent: 'text-fuchsia-400',
-    glow: 'shadow-neon-purple',
-    border: 'border-fuchsia-500/50',
-    iconBg: 'bg-fuchsia-500/20 ring-fuchsia-400/30',
-    line: 'from-fuchsia-500/80 via-fuchsia-400/40 to-transparent',
+    accent: 'text-aurora-primary-400',
+    glow: 'shadow-glow-primary',
+    border: 'border-aurora-primary-500/50',
+    iconBg: 'bg-aurora-primary-500/20 ring-aurora-primary-400/30',
+    line: 'from-aurora-primary-500/80 via-aurora-primary-400/40 to-transparent',
   },
   PLANNER: {
     icon: Brain,
     label: 'Planner',
-    accent: 'text-cyan-400',
-    glow: 'shadow-neon-blue',
-    border: 'border-cyan-500/50',
-    iconBg: 'bg-cyan-500/20 ring-cyan-400/30',
-    line: 'from-cyan-500/80 via-cyan-400/40 to-transparent',
+    accent: 'text-aurora-secondary-300',
+    glow: 'shadow-glow-secondary',
+    border: 'border-aurora-secondary-300/50',
+    iconBg: 'bg-aurora-secondary-300/20 ring-aurora-secondary-300/30',
+    line: 'from-aurora-secondary-300/80 via-aurora-secondary-300/40 to-transparent',
   },
   TOOL_CALL: {
     icon: Wrench,
     label: 'Tool',
-    accent: 'text-amber-400',
-    glow: 'shadow-neon-amber',
-    border: 'border-amber-500/50',
-    iconBg: 'bg-amber-500/20 ring-amber-400/30',
-    line: 'from-amber-500/80 via-amber-400/40 to-transparent',
+    accent: 'text-status-blue',
+    glow: 'shadow-glow-blue',
+    border: 'border-status-blue/50',
+    iconBg: 'bg-status-blue/20 ring-status-blue/30',
+    line: 'from-status-blue/80 via-status-blue/40 to-transparent',
   },
   HUMAN_ESCALATION: {
     icon: AlertTriangle,
     label: 'Escalation',
-    accent: 'text-orange-400',
-    glow: 'shadow-neon-orange',
-    border: 'border-orange-500/50',
-    iconBg: 'bg-orange-500/20 ring-orange-400/30',
-    line: 'from-orange-500/80 via-orange-400/40 to-transparent',
+    accent: 'text-status-orange',
+    glow: 'shadow-glow-orange',
+    border: 'border-status-orange/50',
+    iconBg: 'bg-status-orange/20 ring-status-orange/30',
+    line: 'from-status-orange/80 via-status-orange/40 to-transparent',
   },
 }
 
@@ -81,20 +81,20 @@ function formatTime(ts: number) {
     <!-- Timeline node -->
     <div
       :class="[
-        'absolute left-2 top-5 z-10 h-3 w-3 -translate-x-1/2 rounded-full border-2 bg-slate-950',
+        'absolute left-2 top-5 z-10 h-3 w-3 -translate-x-1/2 rounded-full border-2 bg-canvas',
         theme.border,
         isRunning ? 'animate-neon-pulse' : theme.glow,
       ]"
     />
   <!-- Connector line -->
     <div
-      class="absolute bottom-0 left-2 top-8 w-px -translate-x-1/2 bg-gradient-to-b from-slate-600/60 to-transparent group-last:hidden"
+      class="absolute bottom-0 left-2 top-8 w-px -translate-x-1/2 bg-gradient-to-b from-aurora-gray-500/40 to-transparent group-last:hidden"
     />
 
     <div
       :class="[
         'relative overflow-hidden rounded-xl border backdrop-blur-md transition-all duration-300',
-        'bg-slate-900/30 border-white/10',
+        'bg-surface-translucent border-surface-border',
         theme.border,
         isRunning ? theme.glow : 'hover:shadow-lg',
         isRunning && 'animate-glow-pulse',
@@ -134,23 +134,23 @@ function formatTime(ts: number) {
               </span>
               <TraceStatusIcon :status="event.status" />
             </div>
-            <span class="shrink-0 font-mono text-[10px] tabular-nums text-slate-500">
+            <span class="shrink-0 font-mono text-[10px] tabular-nums text-fg-subtle">
               {{ formatTime(event.timestamp) }}
             </span>
           </div>
 
-          <p class="mt-1.5 text-sm font-medium tracking-wide text-slate-100">
+          <p class="mt-1.5 text-sm font-medium tracking-wide text-fg">
             {{ event.title }}
           </p>
-          <p v-if="event.detail" class="mt-1 text-xs leading-relaxed text-slate-400">
+          <p v-if="event.detail" class="mt-1 text-xs leading-relaxed text-fg-muted">
             {{ event.detail }}
           </p>
 
           <button
             v-if="event.payload"
             :class="[
-              'mt-2.5 flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1',
-              'font-mono text-[10px] uppercase tracking-wider transition hover:bg-white/10',
+              'mt-2.5 flex cursor-pointer items-center gap-1 rounded-md border border-surface-border bg-surface-muted px-2 py-1',
+              'font-mono text-[10px] uppercase tracking-wider transition hover:bg-surface-elevated',
               theme.accent,
             ]"
             @click="expanded = !expanded"
@@ -163,7 +163,7 @@ function formatTime(ts: number) {
             v-if="expanded && event.payload"
             :class="[
               'mt-2 max-h-40 overflow-auto rounded-lg border p-2.5 font-mono text-[11px] leading-relaxed',
-              'border-white/10 bg-black/40 text-slate-300 backdrop-blur-sm',
+              'border-surface-border bg-surface-muted text-fg-muted backdrop-blur-sm',
               theme.glow,
             ]"
           >{{ JSON.stringify(event.payload, null, 2) }}</pre>

@@ -38,7 +38,7 @@ function drawPreview() {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   ctx.drawImage(props.sourceCanvas, 0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = '#3b82f6'
+  ctx.strokeStyle = '#9c59fc'
   ctx.lineWidth = 2
   ctx.strokeRect(cropX.value, cropY.value, cropW.value, cropH.value)
   ctx.fillStyle = 'rgba(0,0,0,0.4)'
@@ -82,10 +82,10 @@ onUnmounted(() => {
 
 <template>
   <div class="space-y-3">
-    <p class="text-sm text-slate-400">Drag to reposition crop area</p>
+    <p class="text-sm text-fg-muted">Drag to reposition crop area</p>
     <canvas
       ref="previewRef"
-      class="mx-auto max-w-full cursor-move rounded-lg border border-slate-600"
+      class="mx-auto max-w-full cursor-move rounded-lg border border-surface-border-strong"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"

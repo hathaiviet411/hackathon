@@ -4,17 +4,19 @@ import type { CapturedImage } from '@/types'
 import { useCamera } from '@/composables/useCamera'
 import { compressCanvas } from '@/composables/useImageCompress'
 import ImageCropper from './ImageCropper.vue'
-import { Camera, RotateCcw, Upload, X } from 'lucide-vue-next'
+import { Camera, RotateCcw, Upload, X, SwitchCamera, Check, Plus } from 'lucide-vue-next'
 
 const emit = defineEmits<{
   capture: [image: CapturedImage]
+  done: [images: CapturedImage[]]
 }>()
 
 const { stream, error, isActive, start, stop, captureFrame } = useCamera()
 const videoRef = ref<HTMLVideoElement | null>(null)
 const capturedCanvas = ref<HTMLCanvasElement | null>(null)
 const showCropper = ref(false)
-const preview = ref<CapturedImage | null>(null)
+const shots = ref<CapturedImage[]>([])
+const facingMode = ref<'user' | 'environment'>('environment')
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 watch(stream, (s) => {
@@ -25,9 +27,17 @@ watch(stream, (s) => {
 
 async function handleStart() {
   try {
-    await start('environment')
+    await start(facingMode.value)
   } catch {
     // error set in composable
+  }
+}
+
+async function handleSwitchCamera() {
+  facingMode.value = facingMode.value === 'environment' ? 'user' : 'environment'
+  if (isActive.value) {
+    stop()
+    await handleStart()
   }
 }
 
@@ -37,11 +47,15 @@ function handleCapture() {
   showCropper.value = true
 }
 
+function addShot(result: CapturedImage) {
+  shots.value.push(result)
+  emit('capture', result)
+}
+
 async function handleCropped(canvas: HTMLCanvasElement) {
   showCropper.value = false
   const result = await compressCanvas(canvas)
-  preview.value = result
-  emit('capture', result)
+  addShot(result)
   stop()
 }
 
@@ -49,8 +63,7 @@ async function handleSkipCrop() {
   if (!capturedCanvas.value) return
   showCropper.value = false
   const result = await compressCanvas(capturedCanvas.value)
-  preview.value = result
-  emit('capture', result)
+  addShot(result)
   stop()
 }
 
@@ -73,8 +86,17 @@ async function handleFileSelect(e: Event) {
   img.src = url
 }
 
+function removeShot(index: number) {
+  shots.value.splice(index, 1)
+}
+
+function finishSession() {
+  emit('done', [...shots.value])
+  shots.value = []
+}
+
 function reset() {
-  preview.value = null
+  shots.value = []
   capturedCanvas.value = null
   showCropper.value = false
   stop()
@@ -86,27 +108,19 @@ onUnmounted(stop)
 <template>
   <div class="card space-y-4">
     <div class="flex items-center justify-between">
-      <h3 class="font-semibold text-slate-100">Camera Capture</h3>
-      <button v-if="preview || isActive" class="btn-secondary px-2 py-1.5" @click="reset">
+      <h3 class="font-semibold text-fg">Camera Capture</h3>
+      <button v-if="shots.length || isActive" class="btn-secondary px-2 py-1.5" @click="reset">
         <RotateCcw class="h-4 w-4" />
       </button>
     </div>
 
-    <p v-if="error" class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+    <p v-if="error" class="rounded-lg bg-status-red/10 px-3 py-2 text-sm text-status-red">
       {{ error }}. Try the file upload fallback below.
     </p>
 
-    <!-- Preview result -->
-    <div v-if="preview" class="space-y-2">
-      <img :src="preview.base64" alt="Captured" class="max-h-48 rounded-lg object-contain" />
-      <p class="text-xs text-slate-400">
-        {{ preview.width }}×{{ preview.height }} · {{ preview.sizeKB }} KB
-      </p>
-    </div>
-
     <!-- Cropper -->
     <ImageCropper
-      v-else-if="showCropper && capturedCanvas"
+      v-if="showCropper && capturedCanvas"
       :source-canvas="capturedCanvas"
       @crop="handleCropped"
       @cancel="handleSkipCrop"
@@ -114,13 +128,22 @@ onUnmounted(stop)
 
     <!-- Live camera -->
     <div v-else-if="isActive" class="space-y-3">
-      <video
-        ref="videoRef"
-        autoplay
-        playsinline
-        muted
-        class="w-full rounded-lg bg-black"
-      />
+      <div class="relative">
+        <video
+          ref="videoRef"
+          autoplay
+          playsinline
+          muted
+          class="w-full rounded-lg bg-black"
+        />
+        <button
+          class="absolute right-2 top-2 rounded-lg bg-black/50 p-2 text-white backdrop-blur-sm"
+          aria-label="Switch camera"
+          @click="handleSwitchCamera"
+        >
+          <SwitchCamera class="h-4 w-4" />
+        </button>
+      </div>
       <div class="flex gap-2">
         <button class="btn-primary flex-1" @click="handleCapture">
           <Camera class="h-4 w-4" />
@@ -128,6 +151,41 @@ onUnmounted(stop)
         </button>
         <button class="btn-secondary" @click="stop">
           <X class="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Thumbnail strip + add-another / done -->
+    <div v-else-if="shots.length" class="space-y-3">
+      <div class="scrollbar-aurora flex gap-2 overflow-x-auto pb-1">
+        <div
+          v-for="(shot, index) in shots"
+          :key="index"
+          class="group relative shrink-0"
+        >
+          <img
+            :src="shot.base64"
+            alt="Captured"
+            class="h-20 w-20 rounded-lg border border-surface-border object-cover"
+          />
+          <button
+            class="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-status-red text-white opacity-0 transition-opacity group-hover:opacity-100"
+            aria-label="Remove shot"
+            @click="removeShot(index)"
+          >
+            <X class="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+      <p class="text-xs text-fg-muted">{{ shots.length }} photo{{ shots.length > 1 ? 's' : '' }} captured</p>
+      <div class="flex gap-2">
+        <button class="btn-secondary flex-1" @click="handleStart">
+          <Plus class="h-4 w-4" />
+          Add another
+        </button>
+        <button class="btn-primary flex-1" @click="finishSession">
+          <Check class="h-4 w-4" />
+          Done
         </button>
       </div>
     </div>
@@ -140,10 +198,10 @@ onUnmounted(stop)
       </button>
       <div class="relative">
         <div class="absolute inset-0 flex items-center">
-          <div class="w-full border-t border-slate-700" />
+          <div class="w-full border-t border-surface-border" />
         </div>
         <div class="relative flex justify-center text-xs">
-          <span class="bg-slate-900 px-2 text-slate-500">or</span>
+          <span class="bg-surface px-2 text-fg-subtle">or</span>
         </div>
       </div>
       <button class="btn-secondary w-full" @click="fileInputRef?.click()">

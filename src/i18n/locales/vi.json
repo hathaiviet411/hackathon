@@ -1,0 +1,46 @@
+{
+  "locale": { "name": "Tiếng Việt" },
+  "nav": {
+    "dashboard": "Tổng quan",
+    "forms": "Biểu mẫu & Dữ liệu",
+    "agent": "Luồng tác vụ AI",
+    "aiEngine": "Bộ máy AI",
+    "media": "Tệp & Media",
+    "settings": "Cài đặt",
+    "logout": "Đăng xuất"
+  },
+  "auth": {
+    "title": "VAIC 2026",
+    "subtitle": "Đăng nhập để vào bảng điều khiển",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "signIn": "Đăng nhập",
+    "or": "hoặc",
+    "continueAsDemo": "Tiếp tục với tài khoản demo",
+    "mockNotice": "Xác thực giả lập cho bản build hackathon này — mọi email/mật khẩu đều được chấp nhận.",
+    "errorRequired": "Vui lòng nhập email và mật khẩu"
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "appearance": "Giao diện",
+    "theme": "Chủ đề",
+    "light": "Sáng",
+    "dark": "Tối",
+    "language": "Ngôn ngữ",
+    "aiEngineSection": "Bộ máy AI",
+    "routingMode": "Chế độ định tuyến",
+    "model": "Mô hình",
+    "data": "Dữ liệu",
+    "clearChatHistory": "Xóa lịch sử trò chuyện",
+    "clearTraceHistory": "Xóa lịch sử luồng tác vụ",
+    "account": "Tài khoản",
+    "loggedInAs": "Đang đăng nhập với",
+    "logout": "Đăng xuất"
+  },
+  "common": {
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "export": "Xuất dữ liệu",
+    "clear": "Xóa"
+  }
+}

@@ -1,16 +1,32 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { TableColumn } from '@/types'
-import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-vue-next'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Download } from 'lucide-vue-next'
+import { exportToXlsx, exportToCsv } from '@/utils/exportData'
+import { useToast } from '@/composables/useToast'
 
 const props = withDefaults(
   defineProps<{
     columns: TableColumn[]
     rows: Record<string, unknown>[]
     pageSize?: number
+    filename?: string
+    exportable?: boolean
   }>(),
-  { pageSize: 10 },
+  { pageSize: 10, filename: 'export', exportable: true },
 )
+
+const toast = useToast()
+
+function handleExport(format: 'xlsx' | 'csv') {
+  if (!props.rows.length) return
+  if (format === 'xlsx') {
+    exportToXlsx(props.columns, sortedRows.value, props.filename)
+  } else {
+    exportToCsv(props.columns, sortedRows.value, props.filename)
+  }
+  toast.success(`Exported ${props.rows.length} rows to ${props.filename}.${format}`)
+}
 
 const sortKey = ref<string | null>(null)
 const sortDir = ref<'asc' | 'desc'>('asc')
@@ -55,10 +71,31 @@ function formatCell(value: unknown): string {
 
 <template>
   <div class="space-y-3">
+    <div v-if="exportable && rows.length" class="flex justify-end gap-2">
+      <button
+        type="button"
+        class="btn-ghost cursor-pointer gap-1.5 px-2.5 py-1.5 text-xs"
+        title="Export as spreadsheet"
+        @click="handleExport('xlsx')"
+      >
+        <Download class="h-3.5 w-3.5" />
+        XLSX
+      </button>
+      <button
+        type="button"
+        class="btn-ghost cursor-pointer gap-1.5 px-2.5 py-1.5 text-xs"
+        title="Export as CSV"
+        @click="handleExport('csv')"
+      >
+        <Download class="h-3.5 w-3.5" />
+        CSV
+      </button>
+    </div>
+
     <!-- Desktop table -->
-    <div class="hidden overflow-x-auto rounded-xl border border-slate-700/60 md:block">
+    <div class="hidden overflow-x-auto rounded-xl border border-surface-border md:block">
       <table class="w-full text-left text-sm">
-        <thead class="bg-slate-800/80 text-slate-400">
+        <thead class="bg-surface-muted text-fg-muted">
           <tr>
             <th
               v-for="col in columns"
@@ -67,7 +104,7 @@ function formatCell(value: unknown): string {
             >
               <button
                 v-if="col.sortable"
-                class="inline-flex items-center gap-1 hover:text-slate-200"
+                class="inline-flex cursor-pointer items-center gap-1 hover:text-fg"
                 @click="toggleSort(col.key)"
               >
                 {{ col.label }}
@@ -83,16 +120,16 @@ function formatCell(value: unknown): string {
           <tr
             v-for="(row, idx) in paginatedRows"
             :key="idx"
-            class="border-t border-slate-700/40 hover:bg-slate-800/40"
+            class="border-t border-surface-border transition-colors hover:bg-surface-muted"
           >
-            <td v-for="col in columns" :key="col.key" class="px-4 py-3 text-slate-300">
+            <td v-for="col in columns" :key="col.key" class="px-4 py-3 text-fg-muted">
               <slot :name="`cell-${col.key}`" :row="row" :value="row[col.key]">
                 {{ formatCell(row[col.key]) }}
               </slot>
             </td>
           </tr>
           <tr v-if="!paginatedRows.length">
-            <td :colspan="columns.length" class="px-4 py-8 text-center text-slate-500">
+            <td :colspan="columns.length" class="px-4 py-8 text-center text-fg-subtle">
               No data available
             </td>
           </tr>
@@ -108,15 +145,15 @@ function formatCell(value: unknown): string {
         class="card space-y-2"
       >
         <div v-for="col in columns" :key="col.key" class="flex justify-between gap-2 text-sm">
-          <span class="text-slate-500">{{ col.label }}</span>
-          <span class="text-right text-slate-200">{{ formatCell(row[col.key]) }}</span>
+          <span class="text-fg-subtle">{{ col.label }}</span>
+          <span class="text-right text-fg">{{ formatCell(row[col.key]) }}</span>
         </div>
       </div>
-      <p v-if="!paginatedRows.length" class="py-8 text-center text-slate-500">No data available</p>
+      <p v-if="!paginatedRows.length" class="py-8 text-center text-fg-subtle">No data available</p>
     </div>
 
     <!-- Pagination -->
-    <div v-if="totalPages > 1" class="flex items-center justify-between text-sm text-slate-400">
+    <div v-if="totalPages > 1" class="flex items-center justify-between text-sm text-fg-muted">
       <span>Page {{ currentPage }} of {{ totalPages }}</span>
       <div class="flex gap-2">
         <button

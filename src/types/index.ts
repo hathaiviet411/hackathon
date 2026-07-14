@@ -84,3 +84,43 @@ export interface CapturedImage {
   height: number
   sizeKB: number
 }
+
+export type ChartType = 'bar' | 'line' | 'donut' | 'area'
+
+export interface ChartSeries {
+  name: string
+  data: number[]
+  color?: string
+}
+
+export interface ChartConfig {
+  id: string
+  type: ChartType
+  title: string
+  labels: string[]
+  series: ChartSeries[]
+}
+
+export interface StatCardConfig {
+  id: string
+  label: string
+  value: string
+  delta?: string
+  trend?: 'up' | 'down' | 'flat'
+}
+
+export interface DashboardSchema {
+  title: string
+  stats: StatCardConfig[]
+  charts: ChartConfig[]
+  table: {
+    columns: TableColumn[]
+    rows: Record<string, unknown>[]
+  }
+}
+
+export interface AuthUser {
+  id: string
+  name: string
+  email: string
+}

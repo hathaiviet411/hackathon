@@ -2,13 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Aurora design tokens.
+  Semantic vars resolve differently per theme; Tailwind maps them to
+  canvas / surface / fg / primary / secondary utilities (see tailwind.config.js).
+*/
 :root {
-  --color-surface: #0f172a;
-  --color-surface-elevated: #1e293b;
-  --color-border: #334155;
-  --color-primary: #3b82f6;
+  --color-bg: #f9f9f9;
+  --color-bg-translucent: rgba(249, 249, 249, 0.75);
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f3f3f3;
+  --color-surface-translucent: rgba(255, 255, 255, 0.7);
+  --color-border: #eaeaea;
+  --color-border-strong: #dcdcdc;
+
+  --color-fg: #111111;
+  --color-fg-muted: #585858;
+  --color-fg-subtle: #888888;
+
+  --color-primary: #8c42f4;
+  --color-primary-hover: #702ad7;
   --color-primary-foreground: #ffffff;
+  --color-primary-soft: #ede0ff;
+  --color-primary-soft-fg: #4c2099;
+
+  --color-secondary: #006640;
+  --color-secondary-hover: #00502f;
+  --color-secondary-foreground: #ffffff;
+  --color-secondary-soft: #ebfdf5;
+  --color-secondary-soft-fg: #006640;
+
   --sidebar-width: 16rem;
+}
+
+:root.dark {
+  --color-bg: #0b0a14;
+  --color-bg-translucent: rgba(11, 10, 20, 0.72);
+  --color-surface: #14121f;
+  --color-surface-elevated: #1b1830;
+  --color-surface-muted: #201c38;
+  --color-surface-translucent: rgba(20, 18, 31, 0.55);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+
+  --color-fg: #f5f3fa;
+  --color-fg-muted: #a8a3ba;
+  --color-fg-subtle: #78748c;
+
+  --color-primary: #8c42f4;
+  --color-primary-hover: #9c59fc;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: rgba(176, 120, 255, 0.16);
+  --color-primary-soft-fg: #cba6ff;
+
+  --color-secondary: #006640;
+  --color-secondary-hover: #00c17a;
+  --color-secondary-foreground: #ffffff;
+  --color-secondary-soft: rgba(5, 245, 156, 0.14);
+  --color-secondary-soft-fg: #05f59c;
 }
 
 @layer base {
@@ -16,48 +68,95 @@
     @apply border-surface-border;
   }
 
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
-    @apply min-h-dvh bg-slate-950 text-slate-100;
+    @apply min-h-dvh bg-canvas font-sans text-fg antialiased transition-colors duration-200;
+  }
+
+  ::selection {
+    @apply bg-aurora-primary-500/25 text-fg;
   }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-slate-700/60 bg-slate-900/80 p-4 shadow-lg backdrop-blur-sm;
+    @apply rounded-2xl border border-surface-border bg-surface-translucent p-4 shadow-sm backdrop-blur-sm transition-colors dark:shadow-black/20;
+  }
+
+  .glass-panel {
+    @apply rounded-2xl border border-surface-border bg-surface-translucent backdrop-blur-xl;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition duration-150 hover:bg-primary-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-surface-border bg-surface-muted px-4 py-2 text-sm font-medium text-fg transition duration-150 hover:border-surface-border-strong hover:bg-surface-elevated active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-fg-muted transition duration-150 hover:bg-surface-muted hover:text-fg active:scale-[0.98];
   }
 
   .input-base {
-    @apply w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500;
+    @apply w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-aurora-primary-500/30;
+  }
+
+  .badge-soft {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-medium text-primary-soft-foreground;
+  }
+
+  .aurora-text {
+    @apply bg-aurora bg-clip-text text-transparent;
   }
 }
 
 @layer utilities {
-  .shadow-neon-cyan {
-    box-shadow: 0 0 10px rgba(34, 211, 238, 0.4), 0 0 20px rgba(34, 211, 238, 0.2);
+  .shadow-glow-primary {
+    box-shadow: 0 0 10px rgba(156, 89, 252, 0.4), 0 0 24px rgba(156, 89, 252, 0.18);
   }
 
-  .shadow-neon-purple {
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.4), 0 0 20px rgba(168, 85, 247, 0.2);
+  .shadow-glow-secondary {
+    box-shadow: 0 0 10px rgba(5, 245, 156, 0.4), 0 0 24px rgba(5, 245, 156, 0.18);
   }
 
-  .shadow-neon-blue {
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4), 0 0 20px rgba(59, 130, 246, 0.2);
+  .shadow-glow-blue {
+    box-shadow: 0 0 10px rgba(30, 165, 252, 0.4), 0 0 24px rgba(30, 165, 252, 0.18);
   }
 
-  .shadow-neon-amber {
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.2);
+  .shadow-glow-orange {
+    box-shadow: 0 0 10px rgba(252, 168, 70, 0.4), 0 0 24px rgba(252, 168, 70, 0.18);
   }
 
-  .shadow-neon-orange {
-    box-shadow: 0 0 10px rgba(249, 115, 22, 0.4), 0 0 20px rgba(249, 115, 22, 0.2);
+  .shadow-glow-red {
+    box-shadow: 0 0 10px rgba(228, 60, 37, 0.4), 0 0 24px rgba(228, 60, 37, 0.18);
+  }
+
+  .bg-size-200 {
+    background-size: 200% 200%;
+  }
+
+  /* Slim aurora-tinted scrollbar for scrollable panels */
+  .scrollbar-aurora {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 89, 252, 0.35) transparent;
+  }
+
+  .scrollbar-aurora::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-aurora::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(156, 89, 252, 0.55), rgba(5, 245, 156, 0.55));
+    border-radius: 9999px;
   }
 }
 

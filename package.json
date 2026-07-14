@@ -11,6 +11,7 @@
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.79",
     "browser-image-compression": "^2.0.2",
+    "chart.js": "^4.5.1",
     "dompurify": "^3.2.4",
     "katex": "^0.17.0",
     "lucide-vue-next": "^0.469.0",
@@ -21,10 +22,13 @@
     "radix-vue": "^1.9.12",
     "turndown": "^7.2.4",
     "vue": "^3.5.13",
+    "vue-chartjs": "^5.3.4",
+    "vue-i18n": "^11.4.6",
     "vue-router": "^4.5.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
     "@types/dompurify": "^3.2.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^26.1.1",
@@ -39,5 +43,6 @@
   },
   "engines": {
     "node": ">=16.0.0"
-  }
+  },
+  "packageManager": "pnpm@10.28.2+sha512.41872f037ad22f7348e3b1debbaf7e867cfd448f2726d9cf74c08f19507c31d2c8e7a11525b983febc2df640b5438dee6023ebb1f84ed43cc2d654d2bc326264"
 }

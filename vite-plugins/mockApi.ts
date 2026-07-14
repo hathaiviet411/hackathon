@@ -12,6 +12,48 @@ const TRACE_EVENTS = [
 
 const MOCK_RESPONSE = `This is a mock cloud inference response. In production, replace mockCloudApi with your actual backend endpoint. The AI Gateway routes here when WebGPU is unavailable or when cloud mode is selected.`
 
+const MOCK_DASHBOARD = {
+  title: 'Business Overview',
+  stats: [
+    { id: 'revenue', label: 'Revenue (MTD)', value: '$48,290', delta: '+12.4%', trend: 'up' },
+    { id: 'orders', label: 'Orders', value: '1,284', delta: '+3.1%', trend: 'up' },
+    { id: 'conversion', label: 'Conversion Rate', value: '3.8%', delta: '-0.4%', trend: 'down' },
+    { id: 'tickets', label: 'Open Tickets', value: '27', delta: '0', trend: 'flat' },
+  ],
+  charts: [
+    {
+      id: 'weekly-revenue',
+      type: 'bar',
+      title: 'Weekly Revenue',
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      series: [{ name: 'Revenue', data: [4200, 5100, 4800, 6300, 7100, 5600, 4900] }],
+    },
+    {
+      id: 'channel-split',
+      type: 'donut',
+      title: 'Orders by Channel',
+      labels: ['Web', 'Mobile', 'Marketplace', 'In-store'],
+      series: [{ name: 'Orders', data: [512, 348, 276, 148] }],
+    },
+  ],
+  table: {
+    columns: [
+      { key: 'id', label: 'Order ID', sortable: true },
+      { key: 'customer', label: 'Customer', sortable: true },
+      { key: 'status', label: 'Status', sortable: true },
+      { key: 'total', label: 'Total', sortable: true },
+      { key: 'date', label: 'Date', sortable: true },
+    ],
+    rows: [
+      { id: 'ORD-1042', customer: 'Nguyen Van A', status: 'Fulfilled', total: '$120.00', date: '2026-07-10' },
+      { id: 'ORD-1043', customer: 'Tran Thi B', status: 'Processing', total: '$86.50', date: '2026-07-11' },
+      { id: 'ORD-1044', customer: 'Le Van C', status: 'Fulfilled', total: '$254.20', date: '2026-07-12' },
+      { id: 'ORD-1045', customer: 'Pham Thi D', status: 'Pending', total: '$42.00', date: '2026-07-13' },
+      { id: 'ORD-1046', customer: 'Hoang Van E', status: 'Fulfilled', total: '$310.75', date: '2026-07-13' },
+    ],
+  },
+}
+
 function sendSse(res: ServerResponse, data: unknown) {
   res.write(`data: ${JSON.stringify(data)}\n\n`)
 }
@@ -29,6 +71,16 @@ export function mockApiPlugin(): Plugin {
   return {
     name: 'vaic-mock-api',
     configureServer(server) {
+      server.middlewares.use('/api/mock-dashboard', (req, res) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405
+          res.end('Method Not Allowed')
+          return
+        }
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(MOCK_DASHBOARD))
+      })
+
       server.middlewares.use('/api/mock-trace', (req, res) => {
         if (req.method !== 'GET') {
           res.statusCode = 405

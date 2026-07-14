@@ -53,13 +53,12 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="card flex h-full flex-col">
-    <h3 class="mb-3 font-semibold text-slate-100">Chat Assistant</h3>
+  <div class="card flex h-full min-h-0 flex-col">
+    <h3 class="mb-3 shrink-0 font-semibold text-fg">Chat Assistant</h3>
 
     <div
       ref="messagesRef"
-      class="flex-1 space-y-3 overflow-y-auto pr-1"
-      style="max-height: 360px"
+      class="scrollbar-aurora min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"
     >
       <div
         v-for="(msg, index) in messages"
@@ -74,12 +73,12 @@ function onKeydown(event: KeyboardEvent) {
         />
       </div>
 
-      <p v-if="!messages.length" class="py-8 text-center text-sm text-slate-500">
+      <p v-if="!messages.length" class="py-8 text-center text-sm text-fg-subtle">
         Start a conversation
       </p>
     </div>
 
-    <form class="mt-3 flex gap-2" @submit.prevent="handleSend">
+    <form class="mt-3 flex shrink-0 gap-2" @submit.prevent="handleSend">
       <textarea
         v-model="input"
         rows="3"

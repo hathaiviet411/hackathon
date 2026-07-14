@@ -12,29 +12,29 @@ const config = computed(() => {
     case 'RUNNING':
       return {
         icon: Loader2,
-        class: 'text-cyan-400 shadow-neon-cyan',
-        badge: 'bg-cyan-500/15 text-cyan-300 border-cyan-400/40',
+        class: 'text-aurora-primary-400 shadow-glow-primary',
+        badge: 'bg-primary-soft text-primary-soft-foreground border-transparent',
         label: 'Running',
       }
     case 'SUCCESS':
       return {
         icon: CheckCircle2,
-        class: 'text-emerald-400 shadow-neon-cyan',
-        badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/40',
+        class: 'text-aurora-secondary-300 shadow-glow-secondary',
+        badge: 'bg-secondary-soft text-secondary-soft-foreground border-transparent',
         label: 'Success',
       }
     case 'ERROR':
       return {
         icon: XCircle,
-        class: 'text-rose-400',
-        badge: 'bg-rose-500/15 text-rose-300 border-rose-400/40',
+        class: 'text-status-red',
+        badge: 'bg-status-red/10 text-status-red border-status-red/30',
         label: 'Error',
       }
     default:
       return {
         icon: Circle,
-        class: 'text-slate-400',
-        badge: 'bg-slate-500/15 text-slate-400 border-slate-500/40',
+        class: 'text-fg-subtle',
+        badge: 'bg-surface-muted text-fg-subtle border-transparent',
         label: 'Pending',
       }
   }
@@ -44,7 +44,7 @@ const config = computed(() => {
 <template>
   <span
     :class="[
-      'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider backdrop-blur-sm',
+      'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider',
       config.badge,
       status === 'RUNNING' && 'animate-glow-pulse',
     ]"

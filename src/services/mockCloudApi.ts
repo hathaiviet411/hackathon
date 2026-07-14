@@ -1,3 +1,5 @@
+import { apiUrl } from '@/config/env'
+
 type StreamCallbacks = {
   onToken?: (token: string) => void
   onDone?: () => void
@@ -5,7 +7,7 @@ type StreamCallbacks = {
 }
 
 export async function streamCloudInference(prompt: string, callbacks: StreamCallbacks = {}) {
-  const response = await fetch('/api/mock-inference', {
+  const response = await fetch(apiUrl('/api/mock-inference'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt }),

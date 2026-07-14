@@ -1,0 +1,46 @@
+{
+  "locale": { "name": "English" },
+  "nav": {
+    "dashboard": "Dashboard",
+    "forms": "Forms & Data",
+    "agent": "Agent Trace",
+    "aiEngine": "AI Engine",
+    "media": "File & Media",
+    "settings": "Settings",
+    "logout": "Logout"
+  },
+  "auth": {
+    "title": "VAIC 2026",
+    "subtitle": "Sign in to continue to your dashboard",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "or": "or",
+    "continueAsDemo": "Continue as demo",
+    "mockNotice": "Mock authentication for this hackathon build — any email/password is accepted.",
+    "errorRequired": "Please enter both email and password"
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "language": "Language",
+    "aiEngineSection": "AI Engine",
+    "routingMode": "Routing mode",
+    "model": "Model",
+    "data": "Data",
+    "clearChatHistory": "Clear chat history",
+    "clearTraceHistory": "Clear trace history",
+    "account": "Account",
+    "loggedInAs": "Logged in as",
+    "logout": "Logout"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "export": "Export",
+    "clear": "Clear"
+  }
+}

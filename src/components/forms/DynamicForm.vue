@@ -79,8 +79,8 @@ const isValid = computed(() => Object.keys(errors).length === 0)
 <template>
   <form class="space-y-4" @submit.prevent="handleSubmit">
     <div v-if="schema.title" class="mb-2">
-      <h3 class="text-base font-semibold text-slate-100">{{ schema.title }}</h3>
-      <p v-if="schema.description" class="mt-1 text-sm text-slate-400">{{ schema.description }}</p>
+      <h3 class="text-base font-semibold text-fg">{{ schema.title }}</h3>
+      <p v-if="schema.description" class="mt-1 text-sm text-fg-muted">{{ schema.description }}</p>
     </div>
 
     <FieldRenderer

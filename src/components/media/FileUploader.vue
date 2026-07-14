@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import type { ExtractedFileResult } from '@/types'
 import { FileExtractor } from '@/services/FileExtractor'
-import { Upload, File, X, Loader2 } from 'lucide-vue-next'
+import { useToast } from '@/composables/useToast'
+import { Upload, File, X } from 'lucide-vue-next'
 
 const props = withDefaults(
   defineProps<{
@@ -21,31 +22,62 @@ const emit = defineEmits<{
   'file-processed': [result: ExtractedFileResult]
 }>()
 
+interface QueueItem {
+  id: string
+  fileName: string
+  progress: number
+  status: 'processing' | 'done' | 'error'
+  errorMessage?: string
+  result?: ExtractedFileResult
+}
+
+const toast = useToast()
 const isDragging = ref(false)
-const processing = ref(false)
-const error = ref<string | null>(null)
-const processedFiles = ref<ExtractedFileResult[]>([])
+const items = ref<QueueItem[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
+function tickProgress(item: QueueItem) {
+  const interval = setInterval(() => {
+    if (item.status !== 'processing') {
+      clearInterval(interval)
+      return
+    }
+    // No native progress events from FileExtractor — simulate a determinate
+    // climb that never reaches 100% until the real result lands.
+    item.progress = Math.min(90, item.progress + Math.random() * 12 + 4)
+  }, 150)
+}
+
 async function processFiles(files: FileList | File[]) {
-  error.value = null
   const fileArray = Array.from(files)
 
   for (const file of fileArray) {
+    const item: QueueItem = {
+      id: crypto.randomUUID(),
+      fileName: file.name,
+      progress: 0,
+      status: 'processing',
+    }
+    items.value.unshift(item)
+
     if (file.size > props.maxSizeMB * 1024 * 1024) {
-      error.value = `"${file.name}" exceeds ${props.maxSizeMB}MB limit`
+      item.status = 'error'
+      item.errorMessage = `Exceeds ${props.maxSizeMB}MB limit`
+      toast.error(`"${file.name}" exceeds ${props.maxSizeMB}MB limit`)
       continue
     }
 
-    processing.value = true
+    tickProgress(item)
     try {
       const result = await FileExtractor.extract(file)
-      processedFiles.value.push(result)
+      item.status = 'done'
+      item.progress = 100
+      item.result = result
       emit('file-processed', result)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Processing failed'
-    } finally {
-      processing.value = false
+      item.status = 'error'
+      item.errorMessage = e instanceof Error ? e.message : 'Processing failed'
+      toast.error(item.errorMessage)
     }
   }
 }
@@ -62,8 +94,8 @@ function onFileChange(e: Event) {
   input.value = ''
 }
 
-function removeFile(index: number) {
-  processedFiles.value.splice(index, 1)
+function removeItem(id: string) {
+  items.value = items.value.filter((item) => item.id !== id)
 }
 
 function formatType(type: string) {
@@ -73,20 +105,20 @@ function formatType(type: string) {
 
 <template>
   <div class="card space-y-4">
-    <h3 class="font-semibold text-slate-100">File Uploader</h3>
+    <h3 class="font-semibold text-fg">File Uploader</h3>
 
     <div
       :class="[
-        'relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 transition',
-        isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-slate-600 hover:border-slate-500',
+        'relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 transition-colors',
+        isDragging ? 'border-primary bg-primary-soft' : 'border-surface-border-strong hover:border-aurora-primary-500/60',
       ]"
       @dragover.prevent="isDragging = true"
       @dragleave.prevent="isDragging = false"
       @drop.prevent="onDrop"
     >
-      <Upload class="mb-3 h-8 w-8 text-slate-500" />
-      <p class="text-sm text-slate-300">Drag & drop files here</p>
-      <p class="mt-1 text-xs text-slate-500">PDF, Excel, Images, Text · Max {{ maxSizeMB }}MB</p>
+      <Upload class="mb-3 h-8 w-8 text-fg-subtle" />
+      <p class="text-sm text-fg-muted">Drag & drop files here</p>
+      <p class="mt-1 text-xs text-fg-subtle">PDF, Excel, Images, Text · Max {{ maxSizeMB }}MB</p>
       <button class="btn-secondary mt-4" @click="fileInputRef?.click()">
         Browse Files
       </button>
@@ -98,36 +130,52 @@ function formatType(type: string) {
         class="hidden"
         @change="onFileChange"
       />
-      <Loader2 v-if="processing" class="absolute right-4 top-4 h-5 w-5 animate-spin text-blue-400" />
     </div>
 
-    <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
-
-    <ul v-if="processedFiles.length" class="space-y-2">
+    <ul v-if="items.length" class="space-y-2">
       <li
-        v-for="(file, idx) in processedFiles"
-        :key="idx"
-        class="flex items-start gap-3 rounded-lg bg-slate-800/60 p-3"
+        v-for="item in items"
+        :key="item.id"
+        class="rounded-lg bg-surface-muted p-3"
       >
-        <img
-          v-if="file.preview"
-          :src="file.preview"
-          alt=""
-          class="h-12 w-12 rounded object-cover"
-        />
-        <File v-else class="mt-1 h-5 w-5 shrink-0 text-slate-400" />
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-slate-200">{{ file.fileName }}</p>
-          <p class="text-xs text-slate-500">
-            {{ formatType(file.type) }} · {{ file.sizeKB }} KB
-          </p>
-          <p v-if="file.text" class="mt-1 line-clamp-2 text-xs text-slate-400">
-            {{ file.text.slice(0, 120) }}{{ file.text.length > 120 ? '...' : '' }}
-          </p>
+        <div class="flex items-start gap-3">
+          <img
+            v-if="item.result?.preview"
+            :src="item.result.preview"
+            alt=""
+            class="h-12 w-12 rounded object-cover"
+          />
+          <File v-else class="mt-1 h-5 w-5 shrink-0 text-fg-subtle" />
+
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-fg">{{ item.fileName }}</p>
+
+            <p v-if="item.status === 'processing'" class="text-xs text-fg-subtle">Processing…</p>
+            <p v-else-if="item.status === 'error'" class="text-xs text-status-red">{{ item.errorMessage }}</p>
+            <p v-else-if="item.result" class="text-xs text-fg-subtle">
+              {{ formatType(item.result.type) }} · {{ item.result.sizeKB }} KB
+            </p>
+
+            <p v-if="item.result?.text" class="mt-1 line-clamp-2 text-xs text-fg-muted">
+              {{ item.result.text.slice(0, 120) }}{{ item.result.text.length > 120 ? '...' : '' }}
+            </p>
+
+            <div v-if="item.status === 'processing'" class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-elevated">
+              <div
+                class="h-full rounded-full bg-aurora transition-all duration-150"
+                :style="{ width: `${item.progress}%` }"
+              />
+            </div>
+          </div>
+
+          <button
+            class="shrink-0 cursor-pointer text-fg-subtle transition-colors hover:text-status-red"
+            aria-label="Remove"
+            @click="removeItem(item.id)"
+          >
+            <X class="h-4 w-4" />
+          </button>
         </div>
-        <button class="shrink-0 text-slate-500 hover:text-red-400" @click="removeFile(idx)">
-          <X class="h-4 w-4" />
-        </button>
       </li>
     </ul>
   </div>

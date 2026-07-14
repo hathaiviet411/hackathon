@@ -9,6 +9,16 @@ export const LOCAL_MODELS = [
     label: 'Llama 3.2 1B',
     hint: 'Lightweight',
   },
+  {
+    // Not in WebLLM's prebuilt catalog yet — per spec §3.3, an MLC-converted
+    // SEA-LION 4B build + custom appConfig model_url must be preloaded and
+    // wired in before competition day. Listed (disabled) so the seat in the
+    // UI/config exists ahead of time; flip `requiresSetup` off once ready.
+    id: 'SEA-LION-4B-Instruct-q4f16_1-MLC',
+    label: 'SEA-LION 4B',
+    hint: 'Requires custom model weights — see config/ai.ts',
+    requiresSetup: true,
+  },
 ] as const
 
 export type LocalModelId = (typeof LOCAL_MODELS)[number]['id']

@@ -3,7 +3,6 @@ import { ref } from 'vue'
 
 export const useAppStore = defineStore('app', () => {
   const sidebarOpen = ref(false)
-  const activeSection = ref('forms')
 
   function toggleSidebar() {
     sidebarOpen.value = !sidebarOpen.value
@@ -13,10 +12,5 @@ export const useAppStore = defineStore('app', () => {
     sidebarOpen.value = false
   }
 
-  function setActiveSection(section: string) {
-    activeSection.value = section
-    closeSidebar()
-  }
-
-  return { sidebarOpen, activeSection, toggleSidebar, closeSidebar, setActiveSection }
+  return { sidebarOpen, toggleSidebar, closeSidebar }
 })

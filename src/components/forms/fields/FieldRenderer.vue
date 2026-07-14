@@ -30,9 +30,9 @@ const boolValue = computed({
 
 <template>
   <div class="space-y-1.5">
-    <label v-if="field.type !== 'checkbox'" :for="field.name" class="block text-sm font-medium text-slate-300">
+    <label v-if="field.type !== 'checkbox'" :for="field.name" class="block text-sm font-medium text-fg-muted">
       {{ field.label }}
-      <span v-if="field.required" class="text-red-400">*</span>
+      <span v-if="field.required" class="text-status-red">*</span>
     </label>
 
     <input
@@ -81,16 +81,16 @@ const boolValue = computed({
       </option>
     </select>
 
-    <label v-else-if="field.type === 'checkbox'" :for="field.name" class="flex items-center gap-2 cursor-pointer">
+    <label v-else-if="field.type === 'checkbox'" :for="field.name" class="flex cursor-pointer items-center gap-2">
       <input
         :id="field.name"
         v-model="boolValue"
         type="checkbox"
-        class="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500"
+        class="h-4 w-4 rounded border-surface-border-strong bg-surface text-primary focus:ring-2 focus:ring-aurora-primary-500/30"
       />
-      <span class="text-sm text-slate-300">{{ field.label }}</span>
+      <span class="text-sm text-fg-muted">{{ field.label }}</span>
     </label>
 
-    <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
+    <p v-if="error" class="text-xs text-status-red">{{ error }}</p>
   </div>
 </template>

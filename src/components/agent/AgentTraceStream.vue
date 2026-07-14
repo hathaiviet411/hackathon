@@ -5,6 +5,7 @@ import TraceTimelineItem from './TraceTimelineItem.vue'
 import { useSseStream } from '@/composables/useSseStream'
 import { useTraceStore } from '@/stores/trace'
 import { clearLiveTrace } from '@/services/TraceEmitter'
+import { apiUrl } from '@/config/env'
 import { Play, Square, Pin, PinOff, Trash2, Activity, Radio } from 'lucide-vue-next'
 
 const props = withDefaults(
@@ -14,7 +15,7 @@ const props = withDefaults(
     autoConnect?: boolean
   }>(),
   {
-    sseUrl: '/api/mock-trace',
+    sseUrl: () => apiUrl('/api/mock-trace'),
     autoConnect: false,
   },
 )
@@ -91,36 +92,36 @@ const statusLabel = computed(() => {
 })
 
 const statusColor = computed(() => {
-  if (statusLabel.value === 'Live' || statusLabel.value === 'Demo stream') return 'text-cyan-400'
-  if (statusLabel.value === 'connecting') return 'text-amber-400'
-  return 'text-slate-500'
+  if (statusLabel.value === 'Live' || statusLabel.value === 'Demo stream') return 'text-aurora-secondary-300'
+  if (statusLabel.value === 'connecting') return 'text-status-orange'
+  return 'text-fg-subtle'
 })
 </script>
 
 <template>
-  <div class="trace-panel relative flex h-full flex-col overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/80 p-4 shadow-neon-cyan backdrop-blur-xl">
+  <div class="trace-panel relative flex h-full flex-col overflow-hidden rounded-2xl border border-aurora-primary-500/20 bg-surface-translucent p-4 shadow-glow-primary backdrop-blur-xl">
     <!-- Ambient grid -->
     <div
-      class="pointer-events-none absolute inset-0 opacity-[0.04]"
-      style="background-image: linear-gradient(rgba(34,211,238,1) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,1) 1px, transparent 1px); background-size: 24px 24px;"
+      class="pointer-events-none absolute inset-0 opacity-[0.05] dark:opacity-[0.06]"
+      style="background-image: linear-gradient(rgba(156,89,252,1) 1px, transparent 1px), linear-gradient(90deg, rgba(156,89,252,1) 1px, transparent 1px); background-size: 24px 24px;"
     />
     <!-- Scan line -->
-    <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.03]">
-      <div class="h-1/3 w-full animate-scan-line bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
+    <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.04]">
+      <div class="h-1/3 w-full animate-scan-line bg-gradient-to-b from-transparent via-aurora-primary-400 to-transparent" />
     </div>
 
   <!-- Header -->
     <div class="relative mb-4 flex items-start justify-between gap-3">
       <div>
         <div class="flex items-center gap-2">
-          <Activity class="h-5 w-5 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-          <h3 class="bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-cyan-300 bg-clip-text font-mono text-sm font-bold uppercase tracking-[0.25em] text-transparent">
+          <Activity class="h-5 w-5 text-aurora-primary-400 drop-shadow-[0_0_8px_rgba(156,89,252,0.8)]" />
+          <h3 class="aurora-text font-mono text-sm font-bold uppercase tracking-[0.25em]">
             Agent Trace
           </h3>
         </div>
         <div class="mt-2 flex flex-wrap items-center gap-3">
-          <span class="font-mono text-xs text-slate-400">
-            <span class="text-cyan-400/80">{{ displayEvents.length }}</span> events
+          <span class="font-mono text-xs text-fg-muted">
+            <span class="text-aurora-primary-400">{{ displayEvents.length }}</span> events
           </span>
           <span class="flex items-center gap-1.5 font-mono text-xs">
             <Radio
@@ -133,7 +134,7 @@ const statusColor = computed(() => {
             <span :class="statusColor">{{ statusLabel }}</span>
           </span>
         </div>
-        <p class="mt-1.5 max-w-sm text-[11px] leading-relaxed text-slate-500">
+        <p class="mt-1.5 max-w-sm text-[11px] leading-relaxed text-fg-subtle">
           Live events stream automatically during local/cloud inference.
         </p>
       </div>
@@ -172,7 +173,7 @@ const statusColor = computed(() => {
     <!-- Timeline -->
     <div
       ref="timelineRef"
-      class="trace-timeline relative flex-1 space-y-3 overflow-y-auto pr-1"
+      class="trace-timeline scrollbar-aurora relative flex-1 space-y-3 overflow-y-auto pr-1"
       style="max-height: 400px; content-visibility: auto"
     >
       <TraceTimelineItem
@@ -184,11 +185,11 @@ const statusColor = computed(() => {
 
       <div
         v-if="!displayEvents.length"
-        class="flex flex-col items-center justify-center rounded-xl border border-dashed border-cyan-500/25 bg-cyan-500/5 px-6 py-12 text-center backdrop-blur-sm"
+        class="flex flex-col items-center justify-center rounded-xl border border-dashed border-aurora-primary-500/25 bg-aurora-primary-500/5 px-6 py-12 text-center backdrop-blur-sm"
       >
-        <Radio class="mb-3 h-8 w-8 text-cyan-500/40" />
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">No trace signal</p>
-        <p class="mt-2 max-w-xs text-sm text-slate-600">
+        <Radio class="mb-3 h-8 w-8 text-aurora-primary-500/40" />
+        <p class="font-mono text-xs uppercase tracking-widest text-fg-subtle">No trace signal</p>
+        <p class="mt-2 max-w-xs text-sm text-fg-muted">
           Run inference to see live trace events, or click Demo for a mock stream.
         </p>
       </div>
@@ -198,25 +199,11 @@ const statusColor = computed(() => {
 
 <style scoped>
 .trace-btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-slate-300 backdrop-blur-sm transition hover:border-cyan-400/40 hover:bg-cyan-500/10 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40;
+  @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-surface-border bg-surface-muted px-2.5 py-1.5 text-sm text-fg-muted backdrop-blur-sm transition hover:border-aurora-primary-400/40 hover:bg-aurora-primary-500/10 hover:text-aurora-primary-400 disabled:cursor-not-allowed disabled:opacity-40;
 }
 
 .trace-btn-primary {
-  @apply border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20;
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.4), 0 0 20px rgba(34, 211, 238, 0.2);
-}
-
-.trace-timeline {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(34, 211, 238, 0.3) transparent;
-}
-
-.trace-timeline::-webkit-scrollbar {
-  width: 4px;
-}
-
-.trace-timeline::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.5), rgba(168, 85, 247, 0.5));
-  border-radius: 9999px;
+  @apply border-aurora-primary-500/40 bg-aurora-primary-500/10 text-aurora-primary-400 hover:bg-aurora-primary-500/20;
+  box-shadow: 0 0 10px rgba(156, 89, 252, 0.4), 0 0 20px rgba(156, 89, 252, 0.2);
 }
 </style>

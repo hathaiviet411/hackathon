@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+import Toaster from './Toaster.vue'
+import AssistantDock from '@/components/chat/AssistantDock.vue'
 
 defineProps<{
   title?: string
@@ -16,5 +18,7 @@ defineProps<{
         <slot />
       </main>
     </div>
+    <AssistantDock />
+    <Toaster />
   </div>
 </template>
