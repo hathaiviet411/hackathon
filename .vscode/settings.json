@@ -2,11 +2,10 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "non-relative",
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true,
   "vue.inlayHints.missingProps": true,
-  "vue.server.hybridMode": true,
-  "vetur.validation.template": false,
-  "vetur.validation.script": false,
-  "vetur.validation.style": false,
-  "vetur.ignoreProjectWarning": true,
-  "vetur.useWorkspaceDependencies": true
+  "files.associations": {
+    "*.vue": "vue"
+  },
+  "volar.tsPlugin": true
 }

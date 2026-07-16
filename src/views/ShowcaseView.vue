@@ -15,8 +15,6 @@ import { useAppStore } from '@/stores/app'
 import { useAiEngineStore } from '@/stores/aiEngine'
 import type { ChatMessage, ExtractedFileResult, FormSchema, TableColumn } from '@/types'
 import formSchemaJson from '@/schemas/formSchema.example.json'
-
-const formSchema = formSchemaJson as FormSchema
 import sampleData from '@/mocks/sampleTableData.json'
 import {
   TabsRoot,
@@ -35,6 +33,7 @@ import {
 } from 'radix-vue'
 import { Cpu, Loader2 } from 'lucide-vue-next'
 
+const formSchema = formSchemaJson as FormSchema
 const appStore = useAppStore()
 const aiStore = useAiEngineStore()
 
@@ -99,7 +98,7 @@ async function loadModel() {
   }
 }
 
-async function onModelChange(value: string) {
+async function onModelChange(value: string | undefined) {
   if (!value || value === selectedModelId.value || isSwitchingModel.value) return
 
   selectedModelId.value = value
@@ -132,7 +131,7 @@ async function runChatInference(prompt: string) {
     await AiGateway.generate(
       prompt,
       {
-        onToken: (token) => {
+        onToken: (token: string) => {
           const msg = chatMessages.value.find((m) => m.id === assistantId)
           if (msg && token) msg.content += token
         },
@@ -184,7 +183,7 @@ async function onAiGenerate() {
     await AiGateway.generate(
       prompt,
       {
-        onToken: (token) => {
+        onToken: (token: string) => {
           if (!token) return
           const current = aiExchanges.value[exchangeIndex]
           aiExchanges.value[exchangeIndex] = {
@@ -216,7 +215,8 @@ async function onAiGenerate() {
   }
 }
 
-function onRoutingChange(value: string) {
+function onRoutingChange(value: string | undefined) {
+  if (!value) return
   aiStore.setRoutingMode(value as 'auto' | 'local' | 'cloud')
 }
 
