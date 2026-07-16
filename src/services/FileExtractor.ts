@@ -1,29 +1,63 @@
 import type { ExtractedFileResult, ExtractedFileType } from '@/types'
+import type { ExtractProgressCallback } from '@/utils/extractProgress'
+import { reportProgress } from '@/utils/extractProgress'
+import { runOcr, renderPdfPageToCanvas } from '@/utils/ocr'
+import { deriveTableName, generateCreateTableSchema } from '@/utils/sqlSchema'
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-const TEXT_EXTENSIONS = ['.txt', '.csv', '.json', '.md']
+const TEXT_EXTENSIONS = ['.txt', '.json', '.md']
+
+const ACCEPTED_EXTENSIONS = [
+  '.pdf', '.xlsx', '.xls', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv', '.json',
+]
 
 function getExtension(name: string): string {
   const idx = name.lastIndexOf('.')
   return idx >= 0 ? name.slice(idx).toLowerCase() : ''
 }
 
+export function isAcceptedFile(file: File): boolean {
+  const ext = getExtension(file.name)
+  return ACCEPTED_EXTENSIONS.includes(ext) || IMAGE_TYPES.includes(file.type)
+}
+
 function detectType(file: File): ExtractedFileType {
+  const ext = getExtension(file.name)
   if (IMAGE_TYPES.includes(file.type)) return 'image'
-  if (file.type === 'application/pdf' || getExtension(file.name) === '.pdf') return 'pdf'
-  if (
-    file.type.includes('spreadsheet') ||
-    ['.xlsx', '.xls'].includes(getExtension(file.name))
-  ) {
-    return 'excel'
-  }
-  if (file.type.startsWith('text/') || TEXT_EXTENSIONS.includes(getExtension(file.name))) {
-    return 'text'
-  }
+  if (file.type === 'application/pdf' || ext === '.pdf') return 'pdf'
+  if (file.type.includes('spreadsheet') || ['.xlsx', '.xls'].includes(ext)) return 'excel'
+  if (ext === '.csv' || file.type === 'text/csv') return 'csv'
+  if (file.type.startsWith('text/') || TEXT_EXTENSIONS.includes(ext)) return 'text'
   return 'unknown'
 }
 
-async function extractText(file: File): Promise<string> {
+function baseResult(
+  partial: Omit<ExtractedFileResult, 'text' | 'extractedText'> & {
+    text?: string | null
+    extractedText?: string | null
+  },
+): ExtractedFileResult {
+  const extractedText = partial.extractedText ?? partial.text ?? null
+  return {
+    ...partial,
+    text: extractedText,
+    extractedText,
+    sqlSchema: partial.sqlSchema ?? null,
+    tableName: partial.tableName ?? null,
+    rowCount: partial.rowCount ?? 0,
+  }
+}
+
+async function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
@@ -32,25 +66,72 @@ async function extractText(file: File): Promise<string> {
   })
 }
 
-async function extractImage(file: File): Promise<ExtractedFileResult> {
-  const preview = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
+function parseCsv(text: string): Record<string, unknown>[] {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim())
+  if (!lines.length) return []
 
+  const headers = lines[0].split(',').map((h) => h.trim())
+  return lines.slice(1).map((line) => {
+    const values = line.split(',').map((v) => v.trim())
+    return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? '']))
+  })
+}
+
+function buildTabularMeta(
+  fileName: string,
+  rows: Record<string, unknown>[],
+  extraStructured: Record<string, unknown> = {},
+) {
+  const tableName = deriveTableName(fileName)
+  const sqlSchema = generateCreateTableSchema(tableName, rows)
   return {
-    type: 'image',
-    text: null,
-    structured: { mimeType: file.type, fileName: file.name },
-    preview,
-    fileName: file.name,
-    sizeKB: Math.round((file.size / 1024) * 10) / 10,
+    tableName,
+    sqlSchema,
+    rowCount: rows.length,
+    structured: { ...extraStructured, rows, tableName, sqlSchema },
   }
 }
 
-async function extractPdf(file: File): Promise<ExtractedFileResult> {
+async function extractImage(
+  file: File,
+  onProgress?: ExtractProgressCallback,
+): Promise<ExtractedFileResult> {
+  reportProgress(onProgress, 'reading', 15)
+  const preview = await readFileAsDataUrl(file)
+
+  reportProgress(onProgress, 'extracting', 45)
+  let extractedText: string | null = null
+  let ocrApplied = false
+
+  try {
+    extractedText = await runOcr(preview, onProgress)
+    ocrApplied = Boolean(extractedText)
+  } catch {
+    extractedText = null
+  }
+
+  reportProgress(onProgress, 'optimizing', 88)
+
+  return baseResult({
+    type: 'image',
+    preview,
+    fileName: file.name,
+    sizeKB: Math.round((file.size / 1024) * 10) / 10,
+    extractedText,
+    structured: { mimeType: file.type, fileName: file.name, ocrApplied },
+    ocrApplied,
+    sqlSchema: null,
+    tableName: null,
+    rowCount: 0,
+  })
+}
+
+async function extractPdf(
+  file: File,
+  onProgress?: ExtractProgressCallback,
+): Promise<ExtractedFileResult> {
+  reportProgress(onProgress, 'reading', 20)
+
   const pdfjs = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -59,6 +140,9 @@ async function extractPdf(file: File): Promise<ExtractedFileResult> {
 
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
+
+  reportProgress(onProgress, 'extracting', 50)
+
   const pages: { page: number; text: string }[] = []
   let fullText = ''
 
@@ -73,19 +157,46 @@ async function extractPdf(file: File): Promise<ExtractedFileResult> {
     fullText += (fullText ? '\n\n' : '') + text
   }
 
-  return {
+  let ocrApplied = false
+  if (!fullText.trim()) {
+    reportProgress(onProgress, 'extracting', 60, 'PDF scan — đang chạy OCR trang 1...')
+    const firstPage = await pdf.getPage(1)
+    const canvas = await renderPdfPageToCanvas(firstPage, 2)
+    const ocrText = await runOcr(canvas, onProgress)
+    if (ocrText) {
+      fullText = ocrText
+      pages[0] = { page: 1, text: ocrText }
+      ocrApplied = true
+    }
+  }
+
+  reportProgress(onProgress, 'optimizing', 85)
+
+  return baseResult({
     type: 'pdf',
-    text: fullText || null,
-    structured: { pageCount: pdf.numPages, pages },
+    extractedText: fullText || null,
+    structured: { pageCount: pdf.numPages, pages, ocrApplied },
     preview: null,
     fileName: file.name,
     sizeKB: Math.round((file.size / 1024) * 10) / 10,
-  }
+    ocrApplied,
+    sqlSchema: null,
+    tableName: null,
+    rowCount: 0,
+  })
 }
 
-async function extractExcel(file: File): Promise<ExtractedFileResult> {
+async function extractExcel(
+  file: File,
+  onProgress?: ExtractProgressCallback,
+): Promise<ExtractedFileResult> {
+  reportProgress(onProgress, 'reading', 25)
+
   const XLSX = await import('xlsx')
   const arrayBuffer = await file.arrayBuffer()
+
+  reportProgress(onProgress, 'extracting', 55)
+
   const workbook = XLSX.read(arrayBuffer, { type: 'array' })
   const sheets: Record<string, unknown[]> = {}
 
@@ -97,68 +208,126 @@ async function extractExcel(file: File): Promise<ExtractedFileResult> {
   const firstSheet = workbook.SheetNames[0]
   const rows = firstSheet ? (sheets[firstSheet] as Record<string, unknown>[]) : []
 
-  return {
+  reportProgress(onProgress, 'optimizing', 88)
+
+  const tabular = buildTabularMeta(file.name, rows, { sheetNames: workbook.SheetNames, sheets })
+
+  return baseResult({
     type: 'excel',
-    text: rows.length ? JSON.stringify(rows, null, 2) : null,
-    structured: { sheetNames: workbook.SheetNames, sheets },
+    extractedText: rows.length ? JSON.stringify(rows.slice(0, 50), null, 2) : null,
+    structured: tabular.structured,
     preview: null,
     fileName: file.name,
     sizeKB: Math.round((file.size / 1024) * 10) / 10,
-  }
+    sqlSchema: tabular.sqlSchema,
+    tableName: tabular.tableName,
+    rowCount: tabular.rowCount,
+  })
 }
 
-async function extractPlainText(file: File): Promise<ExtractedFileResult> {
-  const text = await extractText(file)
-  let structured: Record<string, unknown> | null = null
+async function extractCsv(
+  file: File,
+  onProgress?: ExtractProgressCallback,
+): Promise<ExtractedFileResult> {
+  reportProgress(onProgress, 'reading', 20)
+  const raw = await readFileAsText(file)
 
-  if (getExtension(file.name) === '.json') {
+  reportProgress(onProgress, 'extracting', 55)
+  const rows = parseCsv(raw)
+
+  reportProgress(onProgress, 'optimizing', 88)
+  const tabular = buildTabularMeta(file.name, rows, { headers: rows.length ? Object.keys(rows[0]) : [] })
+
+  return baseResult({
+    type: 'csv',
+    extractedText: raw,
+    structured: tabular.structured,
+    preview: null,
+    fileName: file.name,
+    sizeKB: Math.round((file.size / 1024) * 10) / 10,
+    sqlSchema: tabular.sqlSchema,
+    tableName: tabular.tableName,
+    rowCount: tabular.rowCount,
+  })
+}
+
+async function extractPlainText(
+  file: File,
+  onProgress?: ExtractProgressCallback,
+): Promise<ExtractedFileResult> {
+  reportProgress(onProgress, 'reading', 20)
+  const text = await readFileAsText(file)
+
+  reportProgress(onProgress, 'extracting', 60)
+
+  let structured: Record<string, unknown> | null = null
+  const ext = getExtension(file.name)
+
+  if (ext === '.json') {
     try {
       structured = { parsed: JSON.parse(text) }
     } catch {
       structured = null
     }
-  } else if (getExtension(file.name) === '.csv') {
-    const lines = text.split('\n').filter(Boolean)
-    const headers = lines[0]?.split(',').map((h) => h.trim()) ?? []
-    const rows = lines.slice(1).map((line) => {
-      const values = line.split(',').map((v) => v.trim())
-      return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? '']))
-    })
-    structured = { headers, rows }
   }
 
-  return {
+  reportProgress(onProgress, 'optimizing', 85)
+
+  return baseResult({
     type: 'text',
-    text,
+    extractedText: text,
     structured,
     preview: null,
     fileName: file.name,
     sizeKB: Math.round((file.size / 1024) * 10) / 10,
-  }
+    sqlSchema: null,
+    tableName: null,
+    rowCount: 0,
+  })
 }
 
 export const FileExtractor = {
-  async extract(file: File): Promise<ExtractedFileResult> {
+  isAcceptedFile,
+
+  async extract(
+    file: File,
+    onProgress?: ExtractProgressCallback,
+  ): Promise<ExtractedFileResult> {
     const type = detectType(file)
+
+    let result: ExtractedFileResult
 
     switch (type) {
       case 'image':
-        return extractImage(file)
+        result = await extractImage(file, onProgress)
+        break
       case 'pdf':
-        return extractPdf(file)
+        result = await extractPdf(file, onProgress)
+        break
       case 'excel':
-        return extractExcel(file)
+        result = await extractExcel(file, onProgress)
+        break
+      case 'csv':
+        result = await extractCsv(file, onProgress)
+        break
       case 'text':
-        return extractPlainText(file)
+        result = await extractPlainText(file, onProgress)
+        break
       default:
-        return {
+        result = baseResult({
           type: 'unknown',
-          text: null,
+          extractedText: null,
           structured: null,
           preview: null,
           fileName: file.name,
           sizeKB: Math.round((file.size / 1024) * 10) / 10,
-        }
+          sqlSchema: null,
+          tableName: null,
+          rowCount: 0,
+        })
     }
+
+    reportProgress(onProgress, 'ready', 100)
+    return result
   },
 }

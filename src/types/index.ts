@@ -66,15 +66,23 @@ export interface ChatMessage {
   content: string
 }
 
-export type ExtractedFileType = 'image' | 'pdf' | 'excel' | 'text' | 'unknown'
+export type ExtractedFileType = 'image' | 'pdf' | 'excel' | 'text' | 'csv' | 'unknown'
 
 export interface ExtractedFileResult {
   type: ExtractedFileType
+  /** @deprecated use extractedText — kept for backward compatibility */
   text: string | null
+  /** Unified OCR + PDF + plain text output for RAG */
+  extractedText: string | null
   structured: Record<string, unknown> | null
   preview: string | null
   fileName: string
   sizeKB: number
+  /** SQLite CREATE TABLE schema for tabular files */
+  sqlSchema: string | null
+  tableName: string | null
+  rowCount: number
+  ocrApplied?: boolean
 }
 
 export interface CapturedImage {

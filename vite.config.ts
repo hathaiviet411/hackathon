@@ -23,6 +23,8 @@ export default defineConfig({
           if (id.includes('@mlc-ai/web-llm')) return 'web-llm'
           if (id.includes('pdfjs-dist')) return 'pdf'
           if (id.includes('xlsx')) return 'xlsx'
+          if (id.includes('tesseract')) return 'ocr'
+          if (id.includes('sql.js')) return 'sql'
         },
       },
     },

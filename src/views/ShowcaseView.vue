@@ -9,6 +9,7 @@ import MarkdownContent from '@/components/chat/MarkdownContent.vue'
 import CameraCapture from '@/components/media/CameraCapture.vue'
 import FileUploader from '@/components/media/FileUploader.vue'
 import { AiGateway } from '@/services/AiGateway'
+import { LocalDataStore } from '@/services/LocalDataStore'
 import { DEFAULT_SYSTEM_PROMPT, getModelOption, LOCAL_MODELS } from '@/config/ai'
 import { toSafePromptText, usePlainTextPaste } from '@/utils/plainTextPaste'
 import { useAppStore } from '@/stores/app'
@@ -71,6 +72,8 @@ const aiExchanges = ref<{
   status: 'streaming' | 'done' | 'error'
 }[]>([])
 const systemPrompt = ref(DEFAULT_SYSTEM_PROMPT)
+const baseSystemPrompt = ref(DEFAULT_SYSTEM_PROMPT)
+const loadedContextBanner = ref<string | null>(null)
 const onAiPromptPaste = usePlainTextPaste(aiPrompt, { singleLine: true })
 const onSystemPromptPaste = usePlainTextPaste(systemPrompt)
 const engineHistoryTurns = ref(0)
@@ -221,6 +224,7 @@ function onRoutingChange(value: string | undefined) {
 }
 
 function onSystemPromptChange() {
+  baseSystemPrompt.value = systemPrompt.value
   AiGateway.setSystemPrompt(systemPrompt.value)
 }
 
@@ -233,21 +237,40 @@ function clearEngineHistory() {
 // Module 4: File extraction table
 const extractedRows = ref<Record<string, unknown>[]>([])
 
-function onFileProcessed(result: ExtractedFileResult) {
+async function onFileProcessed(result: ExtractedFileResult) {
   if (result.type === 'excel' && result.structured?.sheets) {
     const sheets = result.structured.sheets as Record<string, Record<string, unknown>[]>
     const firstSheet = Object.values(sheets)[0]
     if (firstSheet) {
       extractedRows.value = firstSheet
-      return
     }
+  } else if (result.structured?.rows && Array.isArray(result.structured.rows)) {
+    extractedRows.value = result.structured.rows as Record<string, unknown>[]
+  } else {
+    extractedRows.value = [{
+      fileName: result.fileName,
+      type: result.type,
+      sizeKB: result.sizeKB,
+      preview: result.extractedText?.slice(0, 200) ?? '—',
+    }]
   }
-  extractedRows.value = [{
-    fileName: result.fileName,
-    type: result.type,
-    sizeKB: result.sizeKB,
-    preview: result.text?.slice(0, 200) ?? '—',
-  }]
+
+  try {
+    if ((result.type === 'excel' || result.type === 'csv') && result.sqlSchema && result.rowCount > 0) {
+      const ctx = await LocalDataStore.loadFromExtractedResult(result)
+      loadedContextBanner.value = `📁 Đã nạp bối cảnh: ${ctx.fileName} (${ctx.rowCount} dòng)`
+    } else if (result.extractedText) {
+      loadedContextBanner.value = `📁 Đã nạp bối cảnh: ${result.fileName}`
+    }
+
+    const contextBlock = LocalDataStore.buildAgentContextBlock(result)
+    const mergedPrompt = `${baseSystemPrompt.value}${contextBlock}`
+    systemPrompt.value = mergedPrompt
+    AiGateway.setSystemPrompt(mergedPrompt)
+  } catch (e) {
+    console.error('Failed to load file into local context:', e)
+    loadedContextBanner.value = null
+  }
 }
 
 const extractedColumns = computed<TableColumn[]>(() => {
@@ -289,6 +312,7 @@ const sectionTitles: Record<string, string> = {
         <ChatAssistant
           :messages="chatMessages"
           :is-streaming="isChatStreaming"
+          :context-banner="loadedContextBanner"
           @send="onChatSend"
         />
       </div>

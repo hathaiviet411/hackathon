@@ -11,12 +11,14 @@ const props = withDefaults(
     streamingContent?: string
     isStreaming?: boolean
     placeholder?: string
+    contextBanner?: string | null
   }>(),
   {
     messages: () => [],
     streamingContent: '',
     isStreaming: false,
     placeholder: 'Nhập câu hỏi hoặc dán công thức toán (VD: $x^2 - 5x + 6 = 0$)...',
+    contextBanner: null,
   },
 )
 
@@ -55,6 +57,13 @@ function onKeydown(event: KeyboardEvent) {
 <template>
   <div class="card flex h-full flex-col">
     <h3 class="mb-3 font-semibold text-slate-100">Chat Assistant</h3>
+
+    <div
+      v-if="contextBanner"
+      class="mb-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200"
+    >
+      {{ contextBanner }}
+    </div>
 
     <div
       ref="messagesRef"

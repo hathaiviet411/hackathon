@@ -5,7 +5,7 @@ const TRACE_EVENTS = [
   { id: '1', type: 'ROUTER', status: 'SUCCESS', title: 'Route resolved', detail: '/api/process', timestamp: Date.now(), payload: { path: '/api/process', method: 'POST' } },
   { id: '2', type: 'PLANNER', status: 'SUCCESS', title: 'Step 1: Analyze input', detail: 'Parsing user request', timestamp: Date.now() + 100, parentId: '1' },
   { id: '3', type: 'PLANNER', status: 'RUNNING', title: 'Step 2: Plan actions', detail: 'Generating action plan', timestamp: Date.now() + 200, parentId: '1' },
-  { id: '4', type: 'TOOL_CALL', status: 'SUCCESS', title: 'search_index', detail: 'Query executed', timestamp: Date.now() + 300, payload: { tool: 'search_index', query: 'sample', results: 3 } },
+  { id: '4', type: 'TOOL_CALL', status: 'SUCCESS', title: 'search_index', detail: 'Query executed', timestamp: Date.now() + 300, payload: { tool: 'search_index', query: "SELECT id, label, category FROM records WHERE active = true LIMIT 10", results: 3 } },
   { id: '5', type: 'TOOL_CALL', status: 'RUNNING', title: 'fetch_data', detail: 'Retrieving records', timestamp: Date.now() + 400, payload: { tool: 'fetch_data', params: { limit: 10 } } },
   { id: '6', type: 'HUMAN_ESCALATION', status: 'PENDING', title: 'Confidence below threshold', detail: 'Awaiting human review', timestamp: Date.now() + 500, payload: { confidence: 0.42, threshold: 0.7 } },
 ]

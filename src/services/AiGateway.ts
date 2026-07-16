@@ -9,9 +9,11 @@ import {
 import type { LlmMessage, WorkerInboundMessage, WorkerOutboundMessage } from '@/workers/ai-worker.types'
 import { serializeMessages } from '@/utils/llmMessages'
 import { useAiEngineStore } from '@/stores/aiEngine'
+import { pinia } from '@/stores/pinia'
 import type { AiBackend, AiRoutingMode } from '@/types'
-import { InferenceTrace } from '@/services/TraceEmitter'
+import { InferenceTrace, finalizeLiveTrace } from '@/services/TraceEmitter'
 import { streamCloudInference } from '@/services/mockCloudApi'
+import { useTraceStore } from '@/stores/trace'
 
 type GenerateCallbacks = {
   onToken?: (token: string) => void
@@ -132,7 +134,7 @@ class AiGatewayService {
 
   private handleWorkerMessage = (event: MessageEvent<WorkerOutboundMessage>) => {
     const msg = event.data
-    const store = useAiEngineStore()
+    const store = useAiEngineStore(pinia)
 
     if (msg.type === 'PROGRESS') {
       store.setModelProgress(Math.round(msg.progress * 100))
@@ -227,7 +229,7 @@ class AiGatewayService {
     if (this.worker && this.workerReady) return
     if (this.initPromise) return this.initPromise
 
-    const store = useAiEngineStore()
+    const store = useAiEngineStore(pinia)
     store.setEngineState('loading')
     store.setActiveBackend('edge')
     store.setModelProgress(0)
@@ -271,7 +273,7 @@ class AiGatewayService {
     if (options?.modelId) this.modelId = options.modelId
     if (options?.systemPrompt) this.setSystemPrompt(options.systemPrompt)
 
-    const store = useAiEngineStore()
+    const store = useAiEngineStore(pinia)
     const mode = options?.mode ?? store.routingMode
     const backend = await this.resolveBackend(mode)
     store.setActiveBackend(backend)
@@ -289,7 +291,7 @@ class AiGatewayService {
     mode?: AiRoutingMode,
     options: GenerateOptions = {},
   ): Promise<string> {
-    const store = useAiEngineStore()
+    const store = useAiEngineStore(pinia)
     const session = options.session ?? 'chat'
     const systemPrompt = options.systemPrompt ?? this.systemPrompt
     const routingMode = mode ?? store.routingMode
@@ -306,6 +308,8 @@ class AiGatewayService {
 
     trace.startInference(backend, messages.length)
 
+    let traceSettled = false
+
     try {
       if (backend === 'edge') {
         accumulated = await this.generateLocal(messages, callbacks)
@@ -319,15 +323,34 @@ class AiGatewayService {
       }
 
       trace.complete(backend, accumulated.length, tokenCount)
+      traceSettled = true
       store.setEngineState('ready')
       callbacks.onDone?.()
       return accumulated
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Inference failed'
       trace.fail(message)
+      traceSettled = true
       store.setError(message)
       callbacks.onError?.(message)
       return accumulated
+    } finally {
+      if (!traceSettled) {
+        trace.abort('Stream ended before completion')
+      }
+
+      // Belt-and-suspenders: no RUNNING steps after chat stream closes
+      const traceStore = useTraceStore(pinia)
+      if (traceStore.isTracing) {
+        traceStore.finalizeRunningSteps(
+          store.engineState === 'error' ? 'ERROR' : 'SUCCESS',
+          'Stream closed',
+        )
+      }
+
+      if (store.engineState === 'inferring') {
+        store.setEngineState('ready')
+      }
     }
   }
 
@@ -399,20 +422,23 @@ class AiGatewayService {
   }
 
   terminate() {
+    this.pendingGenerate?.reject(new Error('Generation cancelled'))
+    this.pendingGenerate = null
     this.disposeWorker()
     this.histories.chat = []
     this.histories.engine = []
-    const store = useAiEngineStore()
+    const store = useAiEngineStore(pinia)
     store.setEngineState('idle')
     store.setActiveBackend(null)
+    finalizeLiveTrace('ERROR', 'Engine unloaded')
   }
 
   getEngineState() {
-    return useAiEngineStore().engineState
+    return useAiEngineStore(pinia).engineState
   }
 
   getActiveBackend() {
-    return useAiEngineStore().activeBackend
+    return useAiEngineStore(pinia).activeBackend
   }
 }
 
