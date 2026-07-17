@@ -1,8 +1,13 @@
 export type WorkerMessageType = 'INIT' | 'GENERATE' | 'TERMINATE' | 'RESET_HISTORY'
-export type WorkerResponseType = 'READY' | 'TOKEN' | 'DONE' | 'ERROR' | 'PROGRESS'
+export type WorkerResponseType = 'READY' | 'TOKEN' | 'DONE' | 'ERROR' | 'PROGRESS' | 'DEBUG'
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export type WebLlmMessage = {
+  role: 'user' | 'assistant'
   content: string
 }
 
@@ -13,8 +18,8 @@ export interface WorkerInitMessage {
 
 export interface WorkerGenerateMessage {
   type: 'GENERATE'
-  /** Preferred: full OpenAI-style message list with string content only. */
-  messages?: LlmMessage[]
+  /** OpenAI-style messages; normalized to user/assistant strings before WebLLM. */
+  messages?: Array<LlmMessage | WebLlmMessage>
   /** Legacy fallback for older worker payloads. */
   prompt?: string
   options?: { temperature?: number; maxTokens?: number }
@@ -58,11 +63,18 @@ export interface WorkerProgressResponse {
   text?: string
 }
 
+export interface WorkerDebugResponse {
+  type: 'DEBUG'
+  stage: string
+  payload: unknown
+}
+
 export type WorkerOutboundMessage =
   | WorkerReadyResponse
   | WorkerTokenResponse
   | WorkerDoneResponse
   | WorkerErrorResponse
   | WorkerProgressResponse
+  | WorkerDebugResponse
 
 export { DEFAULT_MODEL_ID } from '@/config/ai'

@@ -11,6 +11,7 @@ import FileUploader from '@/components/media/FileUploader.vue'
 import { AiGateway } from '@/services/AiGateway'
 import { LocalDataStore } from '@/services/LocalDataStore'
 import { DEFAULT_SYSTEM_PROMPT, getModelOption, LOCAL_MODELS } from '@/config/ai'
+import { createTurnLock } from '@/utils/inferenceGuard'
 import { toSafePromptText, usePlainTextPaste } from '@/utils/plainTextPaste'
 import { useAppStore } from '@/stores/app'
 import { useAiEngineStore } from '@/stores/aiEngine'
@@ -59,12 +60,14 @@ function onFormSubmit(data: Record<string, unknown>) {
 
 // Module 2: Chat
 const chatMessages = ref<ChatMessage[]>([])
-const isChatStreaming = ref(false)
+const chatTurnLock = createTurnLock('Chat.onChatSend')
+const isChatStreaming = computed(() => chatTurnLock.isLocked)
 
 // Module 3: AI Engine
 const aiPrompt = ref('')
 const isModelLoaded = ref(false)
-const isInferring = ref(false)
+const engineTurnLock = createTurnLock('AI.onAiGenerate')
+const isInferring = computed(() => engineTurnLock.isLocked)
 const aiExchanges = ref<{
   id: string
   prompt: string
@@ -121,68 +124,92 @@ async function onModelChange(value: string | undefined) {
   }
 }
 
-async function runChatInference(prompt: string) {
-  if (!isModelLoaded.value) {
-    await loadModel()
+function onChatSend(message: string) {
+  if (!chatTurnLock.tryAcquire()) return
+
+  const content = toSafePromptText(message)
+  if (!content) {
+    chatTurnLock.release()
+    return
   }
 
+  chatMessages.value.push({
+    id: crypto.randomUUID(),
+    role: 'user',
+    content,
+  })
+  void runChatInference(content)
+}
+
+async function runChatInference(prompt: string) {
   const assistantId = crypto.randomUUID()
-  isChatStreaming.value = true
-  chatMessages.value.push({ id: assistantId, role: 'assistant', content: '' })
+  let inferenceError: string | null = null
 
   try {
-    await AiGateway.generate(
+    if (!isModelLoaded.value) {
+      await loadModel()
+      if (!isModelLoaded.value) {
+        throw new Error('Không thể tải model AI')
+      }
+    }
+
+    chatMessages.value.push({ id: assistantId, role: 'assistant', content: '' })
+
+    const result = await AiGateway.generate(
       prompt,
       {
         onToken: (token: string) => {
           const msg = chatMessages.value.find((m) => m.id === assistantId)
           if (msg && token) msg.content += token
         },
+        onError: (message: string) => {
+          inferenceError = message
+        },
       },
       aiStore.routingMode,
       { session: 'chat' },
     )
+
+    if (!result.trim() && inferenceError) {
+      const msg = chatMessages.value.find((m) => m.id === assistantId)
+      if (msg && !msg.content.trim()) {
+        msg.content = inferenceError
+      }
+    }
   } catch (e) {
     const msg = chatMessages.value.find((m) => m.id === assistantId)
     if (msg && !msg.content.trim()) {
       msg.content = e instanceof Error ? e.message : 'Inference failed'
     }
   } finally {
-    isChatStreaming.value = false
+    chatTurnLock.release()
     chatMessages.value = chatMessages.value.filter(
       (m) => m.role !== 'assistant' || m.content.trim().length > 0,
     )
   }
 }
 
-function onChatSend(message: string) {
-  const content = toSafePromptText(message)
-  if (!content) return
-  chatMessages.value.push({
-    id: crypto.randomUUID(),
-    role: 'user',
-    content,
-  })
-  runChatInference(content)
-}
-
 async function onAiGenerate() {
   const prompt = toSafePromptText(aiPrompt.value)
-  if (!prompt || isInferring.value) return
+  if (!prompt || !engineTurnLock.tryAcquire()) return
+
   aiPrompt.value = ''
 
-  if (!isModelLoaded.value) {
-    await loadModel()
-  }
-
-  AiGateway.setSystemPrompt(systemPrompt.value)
-
-  const exchangeIndex = aiExchanges.value.length
-  aiExchanges.value.push({ id: crypto.randomUUID(), prompt, response: '', status: 'streaming' })
-
-  isInferring.value = true
+  let exchangeIndex = -1
 
   try {
+    if (!isModelLoaded.value) {
+      await loadModel()
+      if (!isModelLoaded.value) {
+        throw new Error('Không thể tải model AI')
+      }
+    }
+
+    AiGateway.setSystemPrompt(systemPrompt.value)
+
+    exchangeIndex = aiExchanges.value.length
+    aiExchanges.value.push({ id: crypto.randomUUID(), prompt, response: '', status: 'streaming' })
+
     await AiGateway.generate(
       prompt,
       {
@@ -207,14 +234,16 @@ async function onAiGenerate() {
     }
     engineHistoryTurns.value = Math.floor(AiGateway.getHistory('engine').length / 2)
   } catch (e) {
-    const current = aiExchanges.value[exchangeIndex]
-    aiExchanges.value[exchangeIndex] = {
-      ...current,
-      response: current.response || (e instanceof Error ? e.message : 'Inference failed'),
-      status: 'error',
+    if (exchangeIndex >= 0) {
+      const current = aiExchanges.value[exchangeIndex]
+      aiExchanges.value[exchangeIndex] = {
+        ...current,
+        response: current.response || (e instanceof Error ? e.message : 'Inference failed'),
+        status: 'error',
+      }
     }
   } finally {
-    isInferring.value = false
+    engineTurnLock.release()
   }
 }
 

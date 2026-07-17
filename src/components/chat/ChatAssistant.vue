@@ -3,6 +3,7 @@ import { ref, watch, nextTick } from 'vue'
 import type { ChatMessage as ChatMessageType } from '@/types'
 import ChatMessage from './ChatMessage.vue'
 import { toSafePromptText, usePlainTextPaste } from '@/utils/plainTextPaste'
+import { createSubmitDebounce } from '@/utils/inferenceGuard'
 import { Send } from 'lucide-vue-next'
 
 const props = withDefaults(
@@ -27,6 +28,8 @@ const emit = defineEmits<{
 }>()
 
 const input = ref('')
+const isSending = ref(false)
+const submitDebounce = createSubmitDebounce()
 const messagesRef = ref<HTMLElement | null>(null)
 const onPaste = usePlainTextPaste(input)
 
@@ -40,17 +43,29 @@ async function scrollToBottom() {
 watch(() => props.messages.length, scrollToBottom)
 watch(() => props.streamingContent, scrollToBottom)
 
+watch(
+  () => props.isStreaming,
+  (streaming) => {
+    if (!streaming) isSending.value = false
+  },
+)
+
 function handleSend() {
+  if (submitDebounce.shouldBlock()) return
+
+  if (isSending.value || props.isStreaming) {
+    if (import.meta.env.DEV) {
+      console.warn('[Guard] Đang xử lý câu hỏi trước, chặn gửi trùng lặp')
+    }
+    return
+  }
+
   const text = toSafePromptText(input.value)
-  if (!text || props.isStreaming) return
+  if (!text) return
+
+  isSending.value = true
   emit('send', text)
   input.value = ''
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
-  event.preventDefault()
-  handleSend()
 }
 </script>
 
@@ -94,11 +109,15 @@ function onKeydown(event: KeyboardEvent) {
         rows="3"
         class="input-base flex-1 resize-y"
         :placeholder="placeholder"
-        :disabled="isStreaming"
+        :disabled="isStreaming || isSending"
         @paste.capture="onPaste"
-        @keydown="onKeydown"
+        @keydown.enter.exact.prevent="handleSend"
       />
-      <button type="submit" class="btn-primary self-end px-3" :disabled="!input.trim() || isStreaming">
+      <button
+        type="submit"
+        class="btn-primary self-end px-3"
+        :disabled="!input.trim() || isStreaming || isSending"
+      >
         <Send class="h-4 w-4" />
       </button>
     </form>

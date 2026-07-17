@@ -6,8 +6,9 @@ import {
   LOCAL_MODELS,
   MAX_HISTORY_TURNS,
 } from '@/config/ai'
-import type { LlmMessage, WorkerInboundMessage, WorkerOutboundMessage } from '@/workers/ai-worker.types'
-import { serializeMessages } from '@/utils/llmMessages'
+import type { LlmMessage, WebLlmMessage, WorkerInboundMessage, WorkerOutboundMessage } from '@/workers/ai-worker.types'
+import { logAiPayload, releaseWorkerLockIfBusy, serializeWebLlmMessages, tryAcquireWorkerLock, buildWorkerGeneratePacket } from '@/utils/llmMessages'
+import { createTurnLock } from '@/utils/inferenceGuard'
 import { useAiEngineStore } from '@/stores/aiEngine'
 import { pinia } from '@/stores/pinia'
 import type { AiBackend, AiRoutingMode } from '@/types'
@@ -50,7 +51,7 @@ class AiGatewayService {
   private initResolve: (() => void) | null = null
   private initReject: ((error: Error) => void) | null = null
   private pendingGenerate: PendingGenerate | null = null
-  private generateChain: Promise<unknown> = Promise.resolve()
+  private readonly inferenceLock = createTurnLock('AiGateway.generate')
 
   setSystemPrompt(prompt: string) {
     this.systemPrompt = prompt.trim() || DEFAULT_SYSTEM_PROMPT
@@ -100,7 +101,11 @@ class AiGatewayService {
     }
   }
 
-  private buildMessages(session: AiSessionId, userPrompt: string, systemPrompt: string): LlmMessage[] {
+  private buildMessages(
+    session: AiSessionId,
+    userPrompt: string,
+    systemPrompt: string,
+  ): WebLlmMessage[] {
     const prompt = (userPrompt ?? '').trim()
     if (!prompt) {
       throw new Error('Prompt cannot be empty')
@@ -112,22 +117,21 @@ class AiGatewayService {
       .filter((m) => typeof m.content === 'string' && m.content.trim().length > 0)
       .map((m) => ({ role: m.role, content: m.content.trim() } as HistoryMessage))
 
-    // Single-turn: one user string (system inlined) — avoids system-role edge cases on small LLMs.
-    if (history.length === 0) {
-      return serializeMessages([{ role: 'user', content: `${system}\n\n${prompt}` }])
-    }
-
-    return serializeMessages([
+    const raw: LlmMessage[] = [
       { role: 'system', content: system },
       ...history,
       { role: 'user', content: prompt },
-    ])
+    ]
+
+    const prepared = serializeWebLlmMessages(raw)
+    logAiPayload('buildMessages', { session, promptPreview: prompt.slice(0, 120), messages: prepared })
+    return prepared
   }
 
   private createWorker(): Worker {
     return new Worker(
-      // rev=6: static string required by Vite worker bundler (busts stale worker cache)
-      new URL('../workers/ai-worker.ts?rev=6', import.meta.url),
+      // rev=9: prompt-only single-turn, no auto-retry, hard worker sanitize
+      new URL('../workers/ai-worker.ts?rev=9', import.meta.url),
       { type: 'module' },
     )
   }
@@ -141,6 +145,11 @@ class AiGatewayService {
       return
     }
 
+    if (msg.type === 'DEBUG') {
+      logAiPayload(`worker/${msg.stage}`, msg.payload)
+      return
+    }
+
     if (msg.type === 'TOKEN' && this.pendingGenerate) {
       if (!msg.token) return
       this.pendingGenerate.accumulated += msg.token
@@ -151,12 +160,14 @@ class AiGatewayService {
     if (msg.type === 'DONE' && this.pendingGenerate) {
       const pending = this.pendingGenerate
       this.pendingGenerate = null
+      releaseWorkerLockIfBusy()
       pending.resolve(pending.accumulated)
       return
     }
 
     if (msg.type === 'ERROR') {
       if (this.pendingGenerate) {
+        releaseWorkerLockIfBusy()
         const pending = this.pendingGenerate
         this.pendingGenerate = null
         pending.reject(new Error(msg.message))
@@ -187,6 +198,7 @@ class AiGatewayService {
   private disposeWorker() {
     if (!this.worker) return
 
+    releaseWorkerLockIfBusy()
     this.pendingGenerate?.reject(new Error('Worker disposed'))
     this.pendingGenerate = null
     this.initReject?.(new Error('Worker disposed'))
@@ -204,10 +216,6 @@ class AiGatewayService {
     this.worker.terminate()
     this.worker = null
     this.workerReady = false
-  }
-
-  private isPayloadContentError(message: string) {
-    return message.includes('user message only supports string content')
   }
 
   async resolveBackend(mode: AiRoutingMode): Promise<AiBackend> {
@@ -263,12 +271,6 @@ class AiGatewayService {
     return this.initPromise
   }
 
-  private runExclusiveGenerate<T>(task: () => Promise<T>): Promise<T> {
-    const run = this.generateChain.then(task)
-    this.generateChain = run.then(() => undefined, () => undefined)
-    return run
-  }
-
   async init(options?: { modelId?: string; mode?: AiRoutingMode; systemPrompt?: string }) {
     if (options?.modelId) this.modelId = options.modelId
     if (options?.systemPrompt) this.setSystemPrompt(options.systemPrompt)
@@ -291,12 +293,26 @@ class AiGatewayService {
     mode?: AiRoutingMode,
     options: GenerateOptions = {},
   ): Promise<string> {
+    if (!this.inferenceLock.tryAcquire()) {
+      const message = 'Inference already in progress'
+      logAiPayload('generate skipped', { reason: message, promptPreview: prompt.slice(0, 120) })
+      callbacks.onError?.(message)
+      return ''
+    }
+
     const store = useAiEngineStore(pinia)
     const session = options.session ?? 'chat'
     const systemPrompt = options.systemPrompt ?? this.systemPrompt
     const routingMode = mode ?? store.routingMode
     const backend = await this.resolveBackend(routingMode)
     const messages = this.buildMessages(session, prompt, systemPrompt)
+    logAiPayload('generate', {
+      backend,
+      session,
+      modelId: this.modelId,
+      promptPreview: prompt.slice(0, 200),
+      messages,
+    })
     const trace = new InferenceTrace(backend, routingMode, prompt, this.modelId)
 
     store.setEngineState('inferring')
@@ -335,6 +351,8 @@ class AiGatewayService {
       callbacks.onError?.(message)
       return accumulated
     } finally {
+      this.inferenceLock.release()
+
       if (!traceSettled) {
         trace.abort('Stream ended before completion')
       }
@@ -355,46 +373,33 @@ class AiGatewayService {
   }
 
   private async generateLocal(
-    messages: LlmMessage[],
+    messages: WebLlmMessage[],
     callbacks: GenerateCallbacks,
-    allowRetry = true,
   ): Promise<string> {
-    return this.runExclusiveGenerate(async () => {
-      await this.ensureWorker()
-      if (!this.worker) throw new Error('Worker unavailable')
+    await this.ensureWorker()
+    if (!this.worker) throw new Error('Worker unavailable')
 
-      const payload = serializeMessages(messages)
-
-      try {
-        return await this.postGenerateToWorker(payload, callbacks)
-      } catch (e) {
-        const message = e instanceof Error ? e.message : 'Generation failed'
-        if (allowRetry && this.isPayloadContentError(message)) {
-          this.disposeWorker()
-          await this.ensureWorker()
-          if (!this.worker) throw new Error('Worker unavailable after retry')
-          return this.postGenerateToWorker(payload, callbacks)
-        }
-        throw e
-      }
+    const packet = buildWorkerGeneratePacket(messages, {
+      temperature: DEFAULT_INFERENCE_OPTIONS.temperature,
+      maxTokens: DEFAULT_INFERENCE_OPTIONS.maxTokens,
     })
+    logAiPayload('postMessage → worker', packet)
+
+    return this.postGenerateToWorker(packet, callbacks)
   }
 
-  private postGenerateToWorker(messages: LlmMessage[], callbacks: GenerateCallbacks): Promise<string> {
+  private postGenerateToWorker(
+    packet: WorkerInboundMessage & { type: 'GENERATE' },
+    callbacks: GenerateCallbacks,
+  ): Promise<string> {
     if (!this.worker) return Promise.reject(new Error('Worker unavailable'))
     if (this.pendingGenerate) return Promise.reject(new Error('Generation already in progress'))
+    if (!tryAcquireWorkerLock()) {
+      return Promise.reject(new Error('Worker is busy with another request'))
+    }
 
     const worker = this.worker
-    const packet = JSON.parse(
-      JSON.stringify({
-        type: 'GENERATE',
-        messages,
-        options: {
-          temperature: DEFAULT_INFERENCE_OPTIONS.temperature,
-          maxTokens: DEFAULT_INFERENCE_OPTIONS.maxTokens,
-        },
-      }),
-    ) satisfies WorkerInboundMessage
+    const safePacket = JSON.parse(JSON.stringify(packet)) as WorkerInboundMessage & { type: 'GENERATE' }
 
     return new Promise((resolve, reject) => {
       this.pendingGenerate = {
@@ -403,7 +408,14 @@ class AiGatewayService {
         resolve,
         reject,
       }
-      worker.postMessage(packet)
+
+      try {
+        worker.postMessage(safePacket)
+      } catch (e) {
+        this.pendingGenerate = null
+        releaseWorkerLockIfBusy()
+        reject(e instanceof Error ? e : new Error('Failed to postMessage to worker'))
+      }
     })
   }
 
@@ -422,6 +434,8 @@ class AiGatewayService {
   }
 
   terminate() {
+    this.inferenceLock.release()
+    releaseWorkerLockIfBusy()
     this.pendingGenerate?.reject(new Error('Generation cancelled'))
     this.pendingGenerate = null
     this.disposeWorker()
